@@ -621,6 +621,14 @@ class Crawler:
         """爬取URL"""
         return self.url_crawler.crawl(url, **kwargs)
 
+    def crawl_url_recursive(
+        self, url: str, patterns: list[str] | None = None, max_depth: int = 3, **kwargs
+    ) -> CrawlResult:
+        """递归爬取URL及匹配的子页面"""
+        return self.url_crawler.crawl_recursive(
+            url, patterns=patterns, max_depth=max_depth, **kwargs
+        )
+
     def crawl_local(self, path: Path | str, **kwargs) -> Iterator[CrawlResult]:
         """爬取本地文件"""
         return self.file_crawler.crawl(path, **kwargs)
