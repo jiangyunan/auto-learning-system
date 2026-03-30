@@ -1,4 +1,6 @@
 """爬虫模块 - 支持URL、本地文件和PDF"""
+
+import fnmatch
 import hashlib
 import re
 from pathlib import Path
@@ -13,14 +15,15 @@ from bs4 import BeautifulSoup
 from src.models import Document, SourceType, DocFormat, ImageInfo, Link, DocumentGraph
 
 
-WIKI_LINK_PATTERN = re.compile(r'\[\[([^\]|]+)(?:\|[^\]]*)?\]\]')
-MARKDOWN_LINK_PATTERN = re.compile(r'\[([^\]]*)\]\(([^)]+)\)')
-MARKDOWN_IMAGE_PATTERN = re.compile(r'!\[([^\]]*)\]\(([^)]+)\)')
+WIKI_LINK_PATTERN = re.compile(r"\[\[([^\]|]+)(?:\|[^\]]*)?\]\]")
+MARKDOWN_LINK_PATTERN = re.compile(r"\[([^\]]*)\]\(([^)]+)\)")
+MARKDOWN_IMAGE_PATTERN = re.compile(r"!\[([^\]]*)\]\(([^)]+)\)")
 
 
 @dataclass
 class CrawlResult:
     """爬取结果"""
+
     document: Document
     images_downloaded: int = 0
     errors: list[str] = None
@@ -47,7 +50,9 @@ class BaseCrawler:
 class URLCrawler(BaseCrawler):
     """URL爬虫"""
 
-    def crawl(self, url: str, download_images: bool = False, image_dir: Path = None) -> CrawlResult:
+    def crawl(
+        self, url: str, download_images: bool = False, image_dir: Path = None
+    ) -> CrawlResult:
         """爬取URL内容"""
         result = CrawlResult(
             document=Document(
@@ -74,7 +79,9 @@ class URLCrawler(BaseCrawler):
             images = []
             if download_images and image_dir:
                 images = self._download_images(soup, url, image_dir)
-                result.images_downloaded = len([img for img in images if img.local_path])
+                result.images_downloaded = len(
+                    [img for img in images if img.local_path]
+                )
 
             result.document.title = title
             result.document.content = content
@@ -88,6 +95,96 @@ class URLCrawler(BaseCrawler):
 
         except Exception as e:
             result.errors.append(str(e))
+
+        return result
+
+    def crawl_recursive(
+        self,
+        url: str,
+        patterns: list[str] = None,
+        max_depth: int = 3,
+        visited: set = None,
+        download_images: bool = False,
+        image_dir: Path = None,
+    ) -> CrawlResult:
+        """
+        递归爬取URL及匹配的子页面
+
+        Args:
+            url: 起始URL
+            patterns: 链接匹配模式列表（支持 glob 格式）
+            max_depth: 最大递归深度
+            visited: 已访问URL集合（内部使用）
+            download_images: 是否下载图片
+            image_dir: 图片保存目录
+
+        Returns:
+            CrawlResult: 合并后的文档及统计信息
+        """
+        if visited is None:
+            visited = set()
+
+        result = CrawlResult(
+            document=Document(
+                id=self._generate_id(url),
+                source_type=SourceType.URL,
+                source_path=url,
+            )
+        )
+
+        if url in visited:
+            return result
+        visited.add(url)
+
+        try:
+            response = requests.get(url, headers=self.headers, timeout=self.timeout)
+            response.raise_for_status()
+            response.encoding = response.apparent_encoding or "utf-8"
+
+            soup = BeautifulSoup(response.text, "html.parser")
+
+            title = self._extract_title(soup)
+            content = self._extract_content(soup)
+
+            current_doc = Document(
+                id=self._generate_id(url),
+                source_type=SourceType.URL,
+                source_path=url,
+                title=title,
+                content=content,
+                format=DocFormat.HTML,
+            )
+
+            documents = [current_doc]
+            child_urls = []
+
+            if max_depth > 0:
+                links = self.discover_links(soup, url)
+                for link in links:
+                    if link not in visited and self.match_pattern(link, patterns):
+                        child_urls.append(link)
+
+            for child_url in child_urls:
+                child_result = self.crawl_recursive(
+                    child_url,
+                    patterns=patterns,
+                    max_depth=max_depth - 1,
+                    visited=visited,
+                    download_images=download_images,
+                    image_dir=image_dir,
+                )
+                if child_result.document.content:
+                    documents.append(child_result.document)
+                result.errors.extend(child_result.errors)
+
+            merged_doc = self.merge_documents(documents, url)
+            result.document = merged_doc
+            result.images_downloaded = len(
+                [img for img in merged_doc.images if img.local_path]
+            )
+
+        except Exception as e:
+            result.errors.append(f"{url}: {str(e)}")
 
         return result
 
@@ -126,7 +223,9 @@ class URLCrawler(BaseCrawler):
 
         return ""
 
-    def _download_images(self, soup: BeautifulSoup, base_url: str, image_dir: Path) -> list[ImageInfo]:
+    def _download_images(
+        self, soup: BeautifulSoup, base_url: str, image_dir: Path
+    ) -> list[ImageInfo]:
         """下载页面图片"""
         images = []
         image_dir.mkdir(parents=True, exist_ok=True)
@@ -146,29 +245,92 @@ class URLCrawler(BaseCrawler):
             local_path = image_dir / local_name
 
             try:
-                response = requests.get(full_url, headers=self.headers, timeout=self.timeout)
+                response = requests.get(
+                    full_url, headers=self.headers, timeout=self.timeout
+                )
                 response.raise_for_status()
                 local_path.write_bytes(response.content)
 
-                images.append(ImageInfo(
-                    original_url=full_url,
-                    local_path=local_path,
-                    alt_text=img.get("alt", ""),
-                ))
+                images.append(
+                    ImageInfo(
+                        original_url=full_url,
+                        local_path=local_path,
+                        alt_text=img.get("alt", ""),
+                    )
+                )
             except Exception:
                 # 下载失败但仍记录原URL
-                images.append(ImageInfo(
-                    original_url=full_url,
-                    alt_text=img.get("alt", ""),
-                ))
+                images.append(
+                    ImageInfo(
+                        original_url=full_url,
+                        alt_text=img.get("alt", ""),
+                    )
+                )
 
         return images
+
+    def discover_links(self, soup: BeautifulSoup, base_url: str) -> list[str]:
+        """从页面发现所有链接"""
+        links = []
+        for a in soup.find_all("a", href=True):
+            href = a["href"]
+            if href.startswith(("mailto:", "tel:", "javascript:")):
+                continue
+            full_url = urljoin(base_url, href)
+            parsed = urlparse(full_url)
+            if parsed.scheme in ("http", "https"):
+                links.append(full_url)
+        return list(set(links))
+
+    def match_pattern(self, url: str, patterns: list[str]) -> bool:
+        """判断URL是否匹配任一模式"""
+        if not patterns:
+            return True
+        parsed = urlparse(url)
+        path = parsed.path
+        for pattern in patterns:
+            if fnmatch.fnmatch(path, pattern) or fnmatch.fnmatch(url, pattern):
+                return True
+        return False
+
+    def merge_documents(self, documents: list[Document], base_url: str) -> Document:
+        """合并多个文档为一个"""
+        if not documents:
+            raise ValueError("No documents to merge")
+        if len(documents) == 1:
+            return documents[0]
+
+        merged = Document(
+            id=self._generate_id(base_url),
+            source_type=SourceType.URL,
+            source_path=base_url,
+            title=f"合并文档 ({len(documents)} 页)",
+        )
+
+        parts = [f"> 来源: {base_url}"]
+        parts.append(f"> 采集页面数: {len(documents)}\n")
+
+        for i, doc in enumerate(documents, 1):
+            parts.append(f"---\n\n## Page {i}: {doc.title or 'Untitled'}")
+            parts.append(f"来源: {doc.source_path}\n")
+            parts.append(doc.content)
+
+        merged.content = "\n".join(parts)
+        merged.format = DocFormat.MARKDOWN
+        merged.metadata = {
+            "url": base_url,
+            "merged_count": len(documents),
+            "source_urls": [doc.source_path for doc in documents],
+        }
+        return merged
 
 
 class LocalFileCrawler(BaseCrawler):
     """本地文件爬虫 - 支持文件夹批量处理和链接关系分析"""
 
-    def crawl(self, file_path: Path | str, recursive: bool = False, build_graph: bool = True) -> Iterator[CrawlResult]:
+    def crawl(
+        self, file_path: Path | str, recursive: bool = False, build_graph: bool = True
+    ) -> Iterator[CrawlResult]:
         """
         爬取本地文件
 
@@ -186,8 +348,10 @@ class LocalFileCrawler(BaseCrawler):
                 # 构建文档关系图并按依赖顺序处理
                 graph = self._build_graph(path, recursive)
                 stats = graph.get_statistics()
-                print(f"Document graph: {stats['total_documents']} documents, {stats['total_links']} links")
-                if stats['broken_links'] > 0:
+                print(
+                    f"Document graph: {stats['total_documents']} documents, {stats['total_links']} links"
+                )
+                if stats["broken_links"] > 0:
                     print(f"  Warning: {stats['broken_links']} broken links detected")
 
                 processing_order = graph.get_processing_order()
@@ -195,7 +359,9 @@ class LocalFileCrawler(BaseCrawler):
                     doc = graph.documents[doc_id]
                     result = CrawlResult(document=doc)
                     result.document.metadata["graph"] = graph
-                    result.document.metadata["related_docs"] = graph.get_related_documents(doc_id)
+                    result.document.metadata["related_docs"] = (
+                        graph.get_related_documents(doc_id)
+                    )
                     yield result
             else:
                 # 简单模式：不按顺序处理
@@ -203,7 +369,9 @@ class LocalFileCrawler(BaseCrawler):
                 for file_path in pattern:
                     yield self._process_file(file_path)
 
-    def crawl_folder(self, folder_path: Path | str, recursive: bool = True) -> DocumentGraph:
+    def crawl_folder(
+        self, folder_path: Path | str, recursive: bool = True
+    ) -> DocumentGraph:
         """
         爬取整个文件夹并返回文档关系图
 
@@ -246,56 +414,60 @@ class LocalFileCrawler(BaseCrawler):
         doc_path = Path(doc.source_path)
         doc_dir = doc_path.parent
 
-        for line_num, line in enumerate(content.split('\n'), 1):
+        for line_num, line in enumerate(content.split("\n"), 1):
             # 提取 [[Wiki链接]]
             for match in WIKI_LINK_PATTERN.finditer(line):
                 link_text = match.group(1).strip()
                 # Wiki链接可能有别名：[[Target|Display]]
-                target = link_text.split('|')[0].strip()
+                target = link_text.split("|")[0].strip()
 
-                links.append(Link(
-                    source_doc_id=doc.id,
-                    target_path=target,
-                    link_text=target,
-                    link_type="wiki",
-                    line_number=line_num
-                ))
+                links.append(
+                    Link(
+                        source_doc_id=doc.id,
+                        target_path=target,
+                        link_text=target,
+                        link_type="wiki",
+                        line_number=line_num,
+                    )
+                )
 
             # 提取 [Text](path) Markdown链接（排除图片）
             for match in MARKDOWN_LINK_PATTERN.finditer(line):
                 # 确保不是图片链接
                 start_pos = match.start()
-                if start_pos > 0 and line[start_pos - 1] == '!':
+                if start_pos > 0 and line[start_pos - 1] == "!":
                     continue
 
                 link_text = match.group(1)
                 target_path = match.group(2).strip()
 
                 # 忽略外部URL
-                if target_path.startswith(('http://', 'https://', '#')):
+                if target_path.startswith(("http://", "https://", "#")):
                     continue
 
                 # 解析相对路径
                 resolved_target = self._resolve_link_path(target_path, doc_dir)
 
-                links.append(Link(
-                    source_doc_id=doc.id,
-                    target_path=resolved_target,
-                    link_text=link_text,
-                    link_type="markdown",
-                    line_number=line_num
-                ))
+                links.append(
+                    Link(
+                        source_doc_id=doc.id,
+                        target_path=resolved_target,
+                        link_text=link_text,
+                        link_type="markdown",
+                        line_number=line_num,
+                    )
+                )
 
         return links
 
     def _resolve_link_path(self, target_path: str, base_dir: Path) -> str:
         """解析链接路径为相对或绝对路径"""
         # 如果是绝对路径（以/开头），视为相对于根目录
-        if target_path.startswith('/'):
+        if target_path.startswith("/"):
             return target_path[1:]
 
         # 如果是锚点链接，指向同一文件
-        if target_path.startswith('#'):
+        if target_path.startswith("#"):
             return ""
 
         # 处理相对路径
@@ -340,7 +512,7 @@ class LocalFileCrawler(BaseCrawler):
     def _extract_markdown_title(self, content: str) -> str:
         """从Markdown内容提取标题"""
         # 查找第一个 # 开头的行
-        match = re.search(r'^#\s+(.+)$', content, re.MULTILINE)
+        match = re.search(r"^#\s+(.+)$", content, re.MULTILINE)
         if match:
             return match.group(1).strip()
         return ""
@@ -349,7 +521,9 @@ class LocalFileCrawler(BaseCrawler):
 class PDFCrawler(BaseCrawler):
     """PDF爬虫"""
 
-    def crawl(self, pdf_path: Path | str, extract_images: bool = False, image_dir: Path = None) -> CrawlResult:
+    def crawl(
+        self, pdf_path: Path | str, extract_images: bool = False, image_dir: Path = None
+    ) -> CrawlResult:
         """爬取PDF内容"""
         path = Path(pdf_path)
         result = CrawlResult(
@@ -423,10 +597,12 @@ class PDFCrawler(BaseCrawler):
 
                 try:
                     local_path.write_bytes(image_bytes)
-                    images.append(ImageInfo(
-                        local_path=local_path,
-                        alt_text=f"Page {page_num + 1} Image {img_index}",
-                    ))
+                    images.append(
+                        ImageInfo(
+                            local_path=local_path,
+                            alt_text=f"Page {page_num + 1} Image {img_index}",
+                        )
+                    )
                 except Exception:
                     pass
 
@@ -449,7 +625,9 @@ class Crawler:
         """爬取本地文件"""
         return self.file_crawler.crawl(path, **kwargs)
 
-    def crawl_folder(self, folder_path: Path | str, recursive: bool = True) -> DocumentGraph:
+    def crawl_folder(
+        self, folder_path: Path | str, recursive: bool = True
+    ) -> DocumentGraph:
         """
         爬取整个文件夹并构建文档关系图
 
