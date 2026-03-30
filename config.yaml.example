@@ -23,3 +23,10 @@ chunker:
 cache:
   enabled: true
   db_path: ./data/cache.db
+
+# URL递归采集配置 (可选)
+crawl:
+  patterns:
+    - "*.md"
+    - "*/docs/*"
+  max_depth: 3
