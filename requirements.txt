@@ -1,0 +1,12 @@
+pydantic>=2.0
+pyyaml
+python-dotenv
+requests
+beautifulsoup4
+markdownify
+pymupdf
+openai
+tiktoken
+typer
+fastapi
+uvicorn

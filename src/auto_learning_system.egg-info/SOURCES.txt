@@ -1,0 +1,9 @@
+pyproject.toml
+src/__init__.py
+src/config.py
+src/auto_learning_system.egg-info/PKG-INFO
+src/auto_learning_system.egg-info/SOURCES.txt
+src/auto_learning_system.egg-info/dependency_links.txt
+src/auto_learning_system.egg-info/requires.txt
+src/auto_learning_system.egg-info/top_level.txt
+tests/test_config.py

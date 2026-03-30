@@ -1,0 +1,36 @@
+[project]
+name = "auto-learning-system"
+version = "0.1.0"
+description = "自动学习文档并生成Obsidian笔记"
+requires-python = ">=3.10"
+dependencies = [
+    "pydantic>=2.0",
+    "pyyaml",
+    "python-dotenv",
+    "requests",
+    "beautifulsoup4",
+    "markdownify",
+    "pymupdf",
+    "openai",
+    "tiktoken",
+    "typer",
+    "fastapi",
+    "uvicorn",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+    "pytest-asyncio",
+    "black",
+    "ruff",
+    "mypy",
+]
+
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.pytest.ini_options]
+pythonpath = [".", "src"]
+testpaths = ["tests"]
