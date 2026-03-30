@@ -5,7 +5,7 @@ from typing import AsyncIterator
 from dataclasses import dataclass
 
 from src.config import Config
-from src.models import Document, Chunk, ProcessResult, SourceType
+from src.models import Document, Chunk, ProcessResult, SourceType, DocumentGraph
 from src.crawler import Crawler
 from src.chunker import Chunker
 from src.summarizer import Summarizer
@@ -21,6 +21,14 @@ class PipelineProgress:
     current: int
     total: int
     message: str = ""
+
+
+@dataclass
+class FolderProcessResult:
+    """文件夹处理结果"""
+    results: list[ProcessResult]
+    graph: DocumentGraph
+    statistics: dict
 
 
 class Pipeline:
@@ -113,3 +121,146 @@ class Pipeline:
             except Exception as e:
                 print(f"Error processing {source}: {e}")
         return results
+
+    async def process_folder(
+        self,
+        folder_path: str | Path,
+        recursive: bool = True,
+        include_related_context: bool = True,
+        progress_callback=None
+    ) -> FolderProcessResult:
+        """
+        处理文件夹中的所有Markdown文件，按链接关系排序
+
+        Args:
+            folder_path: 文件夹路径
+            recursive: 是否递归处理子文件夹
+            include_related_context: 是否包含相关文档的上下文
+            progress_callback: 进度回调函数
+
+        Returns:
+            FolderProcessResult: 包含所有处理结果和图信息
+        """
+        path = Path(folder_path)
+        if not path.is_dir():
+            raise ValueError(f"Not a directory: {folder_path}")
+
+        # 1. 构建文档关系图
+        if progress_callback:
+            progress_callback(PipelineProgress(
+                "graph", 0, 3, f"Building document graph from {folder_path}..."
+            ))
+
+        graph = self.crawler.crawl_folder(path, recursive)
+        doc_order = graph.get_processing_order()
+
+        stats = graph.get_statistics()
+        if progress_callback:
+            progress_callback(PipelineProgress(
+                "graph", 1, 3, f"Found {stats['total_documents']} documents, {stats['total_links']} links"
+            ))
+
+        # 2. 按依赖顺序处理文档
+        results = []
+        for i, doc_id in enumerate(doc_order):
+            doc = graph.documents[doc_id]
+
+            if progress_callback:
+                progress_callback(PipelineProgress(
+                    "process", i, len(doc_order), f"Processing {doc.title}..."
+                ))
+
+            try:
+                # 获取相关文档作为上下文
+                related_context = ""
+                if include_related_context:
+                    related_ids = graph.get_related_documents(doc_id)
+                    related_docs = [graph.documents[rid] for rid in related_ids if rid in graph.documents]
+                    if related_docs:
+                        related_context = self._build_related_context(doc, related_docs)
+
+                result = await self._process_single_document(
+                    doc,
+                    related_context=related_context,
+                    progress_callback=progress_callback
+                )
+                results.append(result)
+
+            except Exception as e:
+                print(f"Error processing {doc.source_path}: {e}")
+                # 创建失败的占位结果
+                results.append(ProcessResult(
+                    document_id=doc.id,
+                    document_title=doc.title,
+                    source_url=doc.source_path,
+                ))
+
+        if progress_callback:
+            progress_callback(PipelineProgress(
+                "complete", len(doc_order), len(doc_order), "Done!"
+            ))
+
+        return FolderProcessResult(
+            results=results,
+            graph=graph,
+            statistics={
+                "total": len(results),
+                "successful": len([r for r in results if r.output_path]),
+                **stats
+            }
+        )
+
+    def _build_related_context(self, current_doc: Document, related_docs: list[Document]) -> str:
+        """构建相关文档的上下文信息"""
+        context_parts = ["\n\n## Related Documents Context\n"]
+        for rel_doc in related_docs[:3]:  # 最多3个相关文档
+            context_parts.append(f"\n### From: {rel_doc.title}\n")
+            # 取前500字符作为预览
+            preview = rel_doc.content[:500].replace('#', '').strip()
+            context_parts.append(f"{preview}...\n")
+        return "\n".join(context_parts)
+
+    async def _process_single_document(
+        self,
+        doc: Document,
+        related_context: str = "",
+        progress_callback=None
+    ) -> ProcessResult:
+        """处理单个文档（内部方法）"""
+        # 组合内容（原文 + 相关文档上下文）
+        combined_content = doc.content
+        if related_context:
+            combined_content += related_context
+
+        # 1. 分块
+        chunks = list(self.chunker.chunk(doc.id, combined_content))
+
+        # 2. 生成摘要
+        chunk_summaries = []
+        for chunk in chunks:
+            summary = await self.summarizer.summarize_chunk(chunk)
+            chunk_summaries.append(summary)
+
+        # 合并摘要
+        l1_summaries = [s.l1 for s in chunk_summaries]
+        l2_summaries = [s.l2 for s in chunk_summaries if s.l2.overview]
+
+        merged_l1 = await self.summarizer.merge_l1_summaries(l1_summaries)
+        merged_l2 = await self.summarizer.merge_l2_summaries(l2_summaries)
+
+        # 3. 构建结果
+        result = ProcessResult(
+            document_id=doc.id,
+            document_title=doc.title,
+            source_url=doc.source_path,
+            chunks_count=len(chunks),
+            l1_summary=merged_l1,
+            l2_summary=merged_l2,
+        )
+
+        # 4. 导出
+        export_result = self.exporter.export(result)
+        if export_result.success:
+            result.output_path = export_result.file_path
+
+        return result

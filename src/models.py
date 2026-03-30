@@ -94,3 +94,102 @@ class CacheEntry:
     created_at: datetime = field(default_factory=datetime.now)  # 创建时间
     accessed_at: datetime = field(default_factory=datetime.now)  # 最后访问时间
     access_count: int = 0               # 访问次数
+
+
+@dataclass
+class Link:
+    """文档链接"""
+    source_doc_id: str                  # 源文档ID
+    target_path: str                    # 目标路径（可以是文件名、相对路径或URL）
+    link_text: str                      # 链接显示文本
+    link_type: str                      # 链接类型：wiki, markdown, url
+    line_number: int = 0                # 所在行号
+
+
+@dataclass
+class DocumentGraph:
+    """文档关系图 - 表示文件夹内Markdown文件的链接关系"""
+    root_path: Path                     # 根文件夹路径
+    documents: dict[str, Document] = field(default_factory=dict)  # 文档ID -> 文档
+    links: list[Link] = field(default_factory=list)               # 所有链接
+    incoming_links: dict[str, list[str]] = field(default_factory=dict)  # doc_id -> [source_doc_ids]
+    outgoing_links: dict[str, list[str]] = field(default_factory=dict)  # doc_id -> [target_doc_ids]
+
+    def add_document(self, doc: Document) -> None:
+        """添加文档到图"""
+        self.documents[doc.id] = doc
+        if doc.id not in self.incoming_links:
+            self.incoming_links[doc.id] = []
+        if doc.id not in self.outgoing_links:
+            self.outgoing_links[doc.id] = []
+
+    def add_link(self, link: Link) -> None:
+        """添加链接到图"""
+        self.links.append(link)
+
+        # 更新出链
+        if link.source_doc_id not in self.outgoing_links:
+            self.outgoing_links[link.source_doc_id] = []
+        self.outgoing_links[link.source_doc_id].append(link.target_path)
+
+        # 尝试解析目标文档ID并更新入链
+        target_doc = self._resolve_target(link.target_path)
+        if target_doc:
+            if target_doc.id not in self.incoming_links:
+                self.incoming_links[target_doc.id] = []
+            self.incoming_links[target_doc.id].append(link.source_doc_id)
+
+    def _resolve_target(self, target_path: str) -> Document | None:
+        """解析目标路径为文档"""
+        # 尝试各种匹配方式
+        for doc in self.documents.values():
+            doc_path = Path(doc.source_path)
+            # 完全匹配文件名
+            if doc_path.name == target_path or doc_path.stem == target_path:
+                return doc
+            # 匹配不带扩展名
+            if target_path.endswith('.md') and doc_path.stem == target_path[:-3]:
+                return doc
+        return None
+
+    def get_processing_order(self) -> list[str]:
+        """
+        获取文档处理顺序
+        按拓扑排序，确保被链接的文档先处理
+        返回文档ID列表
+        """
+        # 简单的拓扑排序实现
+        # 优先处理被引用次数多的文档（核心文档）
+        doc_scores = {}
+        for doc_id in self.documents:
+            # 被引用次数越高，优先级越高
+            incoming = len(self.incoming_links.get(doc_id, []))
+            # 引用他人次数越高，优先级越低（依赖越多）
+            outgoing = len(self.outgoing_links.get(doc_id, []))
+            doc_scores[doc_id] = incoming * 2 - outgoing
+
+        # 按分数降序排序
+        return sorted(doc_scores.keys(), key=lambda x: doc_scores[x], reverse=True)
+
+    def get_related_documents(self, doc_id: str) -> list[str]:
+        """获取与指定文档相关的文档ID列表"""
+        related = set()
+        # 出链
+        for target in self.outgoing_links.get(doc_id, []):
+            target_doc = self._resolve_target(target)
+            if target_doc:
+                related.add(target_doc.id)
+        # 入链
+        for source_id in self.incoming_links.get(doc_id, []):
+            related.add(source_id)
+        return list(related)
+
+    def get_statistics(self) -> dict:
+        """获取图的统计信息"""
+        return {
+            "total_documents": len(self.documents),
+            "total_links": len(self.links),
+            "wiki_links": len([l for l in self.links if l.link_type == "wiki"]),
+            "markdown_links": len([l for l in self.links if l.link_type == "markdown"]),
+            "broken_links": len([l for l in self.links if not self._resolve_target(l.target_path)]),
+        }

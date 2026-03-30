@@ -20,10 +20,15 @@ def process(
     source: str = typer.Argument(..., help="文档来源 (URL, 文件路径或目录)"),
     config_path: Optional[str] = typer.Option(None, "--config", "-c", help="配置文件路径"),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="详细输出"),
+    recursive: bool = typer.Option(True, "--recursive", "-r", help="递归处理子文件夹"),
+    no_related_context: bool = typer.Option(False, "--no-related-context", help="不包含相关文档上下文"),
 ):
     """处理单个文档或目录"""
     config = load_config(config_path) if config_path else load_config()
     pipeline = Pipeline(config)
+
+    source_path = Path(source)
+    is_folder = source_path.is_dir()
 
     def progress_callback(p: PipelineProgress):
         if verbose:
@@ -37,20 +42,58 @@ def process(
         task = progress.add_task("Processing...", total=None)
 
         async def run():
-            result = await pipeline.process_document(source, progress_callback)
-            progress.update(task, description=f"✓ Exported to {result.output_path}")
-            return result
+            if is_folder:
+                # 使用文件夹处理模式
+                result = await pipeline.process_folder(
+                    source,
+                    recursive=recursive,
+                    include_related_context=not no_related_context,
+                    progress_callback=progress_callback
+                )
+                progress.update(task, description=f"✓ Processed {len(result.results)} documents")
+                return result
+            else:
+                # 单文件处理
+                result = await pipeline.process_document(source, progress_callback)
+                progress.update(task, description=f"✓ Exported to {result.output_path}")
+                return result
 
         result = asyncio.run(run())
 
     # 显示结果
-    table = Table(title="Processing Result")
-    table.add_column("Field", style="cyan")
-    table.add_column("Value", style="green")
-    table.add_row("Title", result.document_title)
-    table.add_row("Chunks", str(result.chunks_count))
-    table.add_row("Output", str(result.output_path) if result.output_path else "N/A")
-    console.print(table)
+    if is_folder:
+        # 文件夹处理结果
+        table = Table(title=f"Folder Processing Results ({result.statistics['successful']}/{result.statistics['total']} successful)")
+        table.add_column("Field", style="cyan")
+        table.add_column("Value", style="green")
+        table.add_row("Total Documents", str(result.statistics['total_documents']))
+        table.add_row("Total Links", str(result.statistics['total_links']))
+        table.add_row("Wiki Links", str(result.statistics['wiki_links']))
+        table.add_row("Markdown Links", str(result.statistics['markdown_links']))
+        table.add_row("Broken Links", str(result.statistics['broken_links']))
+        console.print(table)
+
+        # 详细结果表
+        detail_table = Table(title="Processed Documents")
+        detail_table.add_column("Title", style="cyan")
+        detail_table.add_column("Chunks", style="blue")
+        detail_table.add_column("Output", style="green")
+        for r in result.results:
+            detail_table.add_row(
+                r.document_title[:50],
+                str(r.chunks_count),
+                str(r.output_path) if r.output_path else "Failed"
+            )
+        console.print(detail_table)
+    else:
+        # 单文件处理结果
+        table = Table(title="Processing Result")
+        table.add_column("Field", style="cyan")
+        table.add_column("Value", style="green")
+        table.add_row("Title", result.document_title)
+        table.add_row("Chunks", str(result.chunks_count))
+        table.add_row("Output", str(result.output_path) if result.output_path else "N/A")
+        console.print(table)
 
 
 @app.command()

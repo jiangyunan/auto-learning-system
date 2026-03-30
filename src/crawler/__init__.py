@@ -10,7 +10,12 @@ import requests
 import fitz  # PyMuPDF
 from bs4 import BeautifulSoup
 
-from src.models import Document, SourceType, DocFormat, ImageInfo
+from src.models import Document, SourceType, DocFormat, ImageInfo, Link, DocumentGraph
+
+
+WIKI_LINK_PATTERN = re.compile(r'\[\[([^\]|]+)(?:\|[^\]]*)?\]\]')
+MARKDOWN_LINK_PATTERN = re.compile(r'\[([^\]]*)\]\(([^)]+)\)')
+MARKDOWN_IMAGE_PATTERN = re.compile(r'!\[([^\]]*)\]\(([^)]+)\)')
 
 
 @dataclass
@@ -161,20 +166,146 @@ class URLCrawler(BaseCrawler):
 
 
 class LocalFileCrawler(BaseCrawler):
-    """本地文件爬虫"""
+    """本地文件爬虫 - 支持文件夹批量处理和链接关系分析"""
 
-    def crawl(self, file_path: Path | str, recursive: bool = False) -> Iterator[CrawlResult]:
-        """爬取本地文件"""
+    def crawl(self, file_path: Path | str, recursive: bool = False, build_graph: bool = True) -> Iterator[CrawlResult]:
+        """
+        爬取本地文件
+
+        Args:
+            file_path: 文件或文件夹路径
+            recursive: 是否递归处理子文件夹
+            build_graph: 是否构建文档关系图（仅在处理文件夹时有效）
+        """
         path = Path(file_path)
 
         if path.is_file():
             yield self._process_file(path)
-        elif path.is_dir() and recursive:
-            for file_path in path.rglob("*.md"):
-                yield self._process_file(file_path)
         elif path.is_dir():
-            for file_path in path.glob("*.md"):
-                yield self._process_file(file_path)
+            if build_graph:
+                # 构建文档关系图并按依赖顺序处理
+                graph = self._build_graph(path, recursive)
+                stats = graph.get_statistics()
+                print(f"Document graph: {stats['total_documents']} documents, {stats['total_links']} links")
+                if stats['broken_links'] > 0:
+                    print(f"  Warning: {stats['broken_links']} broken links detected")
+
+                processing_order = graph.get_processing_order()
+                for doc_id in processing_order:
+                    doc = graph.documents[doc_id]
+                    result = CrawlResult(document=doc)
+                    result.document.metadata["graph"] = graph
+                    result.document.metadata["related_docs"] = graph.get_related_documents(doc_id)
+                    yield result
+            else:
+                # 简单模式：不按顺序处理
+                pattern = path.rglob("*.md") if recursive else path.glob("*.md")
+                for file_path in pattern:
+                    yield self._process_file(file_path)
+
+    def crawl_folder(self, folder_path: Path | str, recursive: bool = True) -> DocumentGraph:
+        """
+        爬取整个文件夹并返回文档关系图
+
+        Args:
+            folder_path: 文件夹路径
+            recursive: 是否递归处理子文件夹
+
+        Returns:
+            DocumentGraph: 包含所有文档和链接关系的图
+        """
+        path = Path(folder_path)
+        if not path.is_dir():
+            raise ValueError(f"Not a directory: {path}")
+
+        return self._build_graph(path, recursive)
+
+    def _build_graph(self, root_path: Path, recursive: bool) -> DocumentGraph:
+        """构建文档关系图"""
+        graph = DocumentGraph(root_path=root_path)
+
+        # 第一步：收集所有文档
+        pattern = root_path.rglob("*.md") if recursive else root_path.glob("*.md")
+        for file_path in pattern:
+            result = self._process_file(file_path)
+            if result.document.content:
+                graph.add_document(result.document)
+
+        # 第二步：解析所有文档中的链接
+        for doc in list(graph.documents.values()):
+            links = self._extract_links(doc)
+            for link in links:
+                graph.add_link(link)
+
+        return graph
+
+    def _extract_links(self, doc: Document) -> list[Link]:
+        """从文档内容中提取链接"""
+        links = []
+        content = doc.content
+        doc_path = Path(doc.source_path)
+        doc_dir = doc_path.parent
+
+        for line_num, line in enumerate(content.split('\n'), 1):
+            # 提取 [[Wiki链接]]
+            for match in WIKI_LINK_PATTERN.finditer(line):
+                link_text = match.group(1).strip()
+                # Wiki链接可能有别名：[[Target|Display]]
+                target = link_text.split('|')[0].strip()
+
+                links.append(Link(
+                    source_doc_id=doc.id,
+                    target_path=target,
+                    link_text=target,
+                    link_type="wiki",
+                    line_number=line_num
+                ))
+
+            # 提取 [Text](path) Markdown链接（排除图片）
+            for match in MARKDOWN_LINK_PATTERN.finditer(line):
+                # 确保不是图片链接
+                start_pos = match.start()
+                if start_pos > 0 and line[start_pos - 1] == '!':
+                    continue
+
+                link_text = match.group(1)
+                target_path = match.group(2).strip()
+
+                # 忽略外部URL
+                if target_path.startswith(('http://', 'https://', '#')):
+                    continue
+
+                # 解析相对路径
+                resolved_target = self._resolve_link_path(target_path, doc_dir)
+
+                links.append(Link(
+                    source_doc_id=doc.id,
+                    target_path=resolved_target,
+                    link_text=link_text,
+                    link_type="markdown",
+                    line_number=line_num
+                ))
+
+        return links
+
+    def _resolve_link_path(self, target_path: str, base_dir: Path) -> str:
+        """解析链接路径为相对或绝对路径"""
+        # 如果是绝对路径（以/开头），视为相对于根目录
+        if target_path.startswith('/'):
+            return target_path[1:]
+
+        # 如果是锚点链接，指向同一文件
+        if target_path.startswith('#'):
+            return ""
+
+        # 处理相对路径
+        target = Path(target_path)
+        if target.is_absolute():
+            return str(target)
+
+        # 尝试解析为相对于当前文件的绝对路径
+        resolved = (base_dir / target).resolve()
+        return str(resolved)
 
     def _process_file(self, file_path: Path) -> CrawlResult:
         """处理单个文件"""
@@ -198,6 +329,7 @@ class LocalFileCrawler(BaseCrawler):
             result.document.metadata = {
                 "file_path": str(file_path),
                 "file_size": file_path.stat().st_size,
+                "relative_path": file_path.name,
             }
 
         except Exception as e:
@@ -316,6 +448,19 @@ class Crawler:
     def crawl_local(self, path: Path | str, **kwargs) -> Iterator[CrawlResult]:
         """爬取本地文件"""
         return self.file_crawler.crawl(path, **kwargs)
+
+    def crawl_folder(self, folder_path: Path | str, recursive: bool = True) -> DocumentGraph:
+        """
+        爬取整个文件夹并构建文档关系图
+
+        Args:
+            folder_path: 文件夹路径
+            recursive: 是否递归处理子文件夹
+
+        Returns:
+            DocumentGraph: 包含所有文档和链接关系的图
+        """
+        return self.file_crawler.crawl_folder(folder_path, recursive)
 
     def crawl_pdf(self, path: Path | str, **kwargs) -> CrawlResult:
         """爬取PDF"""

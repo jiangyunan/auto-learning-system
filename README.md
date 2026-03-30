@@ -100,6 +100,15 @@ uv run python -m src.cli process ./docs/guide.md
 # 处理 PDF 文件
 uv run python -m src.cli process ./papers/research.pdf
 
+# 处理文件夹（自动分析文件链接关系）
+uv run python -m src.cli process ./my-obsidian-vault/
+
+# 处理文件夹（不包含相关文档上下文）
+uv run python -m src.cli process ./my-obsidian-vault/ --no-related-context
+
+# 处理文件夹（非递归）
+uv run python -m src.cli process ./folder/ --no-recursive
+
 # 批量处理（从文件读取来源列表）
 echo "https://example.com/page1" > sources.txt
 echo "./local/doc.md" >> sources.txt
@@ -125,15 +134,27 @@ uv run python -m src.cli serve --port 8080
 API 端点：
 
 - `GET /health` - 健康检查
-- `POST /process` - 处理单个文档
+- `POST /process` - 处理单个文档或文件夹
+- `POST /folder` - 专门处理文件夹
 - `POST /batch` - 批量处理文档
 
 示例：
 
 ```bash
+# 处理单个文档
 curl -X POST http://localhost:8000/process \
   -H "Content-Type: application/json" \
   -d '{"source": "https://example.com/article"}'
+
+# 处理文件夹
+curl -X POST http://localhost:8000/process \
+  -H "Content-Type: application/json" \
+  -d '{"source": "./my-vault", "recursive": true}'
+
+# 使用专门的文件夹端点
+curl -X POST http://localhost:8000/folder \
+  -H "Content-Type: application/json" \
+  -d '{"path": "./my-vault", "include_related_context": true}'
 ```
 
 ### Python API
@@ -153,7 +174,52 @@ async def main():
 asyncio.run(main())
 ```
 
-## 输出格式
+## 文件夹批量处理与链接关系
+
+当处理本地 Markdown 文件夹时，系统会自动：
+
+1. **扫描所有 Markdown 文件**（支持递归子文件夹）
+2. **解析文件链接关系**：
+   - Obsidian Wiki 链接：`[[Page Name]]`
+   - Markdown 链接：`[Text](./path/to/file.md)`
+3. **构建文档关系图**：分析文件间的引用关系
+4. **按依赖顺序处理**：被引用最多的文件优先处理
+5. **包含相关文档上下文**：处理时自动附加相关文档的内容作为上下文
+
+### 链接关系示例
+
+假设有以下 Obsidian Vault 结构：
+
+```
+vault/
+├── Python.md          (被 3 个文件引用)
+├── Async Programming.md  (被 1 个文件引用，引用 Python)
+└── Guide.md           (引用 Python 和 Async Programming)
+```
+
+系统会：
+1. 首先处理 `Python.md`（核心文档）
+2. 然后处理 `Async Programming.md`
+3. 最后处理 `Guide.md`（会包含前两个文档的上下文）
+
+### API 端点
+
+```bash
+# 处理文件夹
+POST /folder
+{
+  "path": "./my-vault",
+  "recursive": true,
+  "include_related_context": true
+}
+
+# 通用处理端点（自动识别文件夹）
+POST /process
+{
+  "source": "./my-vault",
+  "recursive": true
+}
+```
 
 ### Markdown 格式
 
