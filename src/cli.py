@@ -1,4 +1,5 @@
 """CLI主程序"""
+
 import asyncio
 from pathlib import Path
 from typing import Optional
@@ -18,10 +19,18 @@ console = Console()
 @app.command()
 def process(
     source: str = typer.Argument(..., help="文档来源 (URL, 文件路径或目录)"),
-    config_path: Optional[str] = typer.Option(None, "--config", "-c", help="配置文件路径"),
+    config_path: Optional[str] = typer.Option(
+        None, "--config", "-c", help="配置文件路径"
+    ),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="详细输出"),
     recursive: bool = typer.Option(True, "--recursive", "-r", help="递归处理子文件夹"),
-    no_related_context: bool = typer.Option(False, "--no-related-context", help="不包含相关文档上下文"),
+    no_related_context: bool = typer.Option(
+        False, "--no-related-context", help="不包含相关文档上下文"
+    ),
+    pattern: Optional[list[str]] = typer.Option(
+        None, "--pattern", "-p", help="URL匹配模式 (可用于URL递归采集)"
+    ),
+    max_depth: int = typer.Option(3, "--max-depth", "-d", help="URL递归最大深度"),
 ):
     """处理单个文档或目录"""
     config = load_config(config_path) if config_path else load_config()
@@ -48,10 +57,33 @@ def process(
                     source,
                     recursive=recursive,
                     include_related_context=not no_related_context,
-                    progress_callback=progress_callback
+                    progress_callback=progress_callback,
                 )
-                progress.update(task, description=f"✓ Processed {len(result.results)} documents")
+                progress.update(
+                    task, description=f"✓ Processed {len(result.results)} documents"
+                )
                 return result
+            elif source.startswith(("http://", "https://")):
+                # URL处理模式
+                if pattern:
+                    # 递归采集模式
+                    result = await pipeline.process_url_recursive(
+                        source,
+                        patterns=pattern,
+                        max_depth=max_depth,
+                        progress_callback=progress_callback,
+                    )
+                    progress.update(
+                        task, description=f"✓ Exported to {result.output_path}"
+                    )
+                    return result
+                else:
+                    # 单URL处理
+                    result = await pipeline.process_document(source, progress_callback)
+                    progress.update(
+                        task, description=f"✓ Exported to {result.output_path}"
+                    )
+                    return result
             else:
                 # 单文件处理
                 result = await pipeline.process_document(source, progress_callback)
@@ -63,14 +95,16 @@ def process(
     # 显示结果
     if is_folder:
         # 文件夹处理结果
-        table = Table(title=f"Folder Processing Results ({result.statistics['successful']}/{result.statistics['total']} successful)")
+        table = Table(
+            title=f"Folder Processing Results ({result.statistics['successful']}/{result.statistics['total']} successful)"
+        )
         table.add_column("Field", style="cyan")
         table.add_column("Value", style="green")
-        table.add_row("Total Documents", str(result.statistics['total_documents']))
-        table.add_row("Total Links", str(result.statistics['total_links']))
-        table.add_row("Wiki Links", str(result.statistics['wiki_links']))
-        table.add_row("Markdown Links", str(result.statistics['markdown_links']))
-        table.add_row("Broken Links", str(result.statistics['broken_links']))
+        table.add_row("Total Documents", str(result.statistics["total_documents"]))
+        table.add_row("Total Links", str(result.statistics["total_links"]))
+        table.add_row("Wiki Links", str(result.statistics["wiki_links"]))
+        table.add_row("Markdown Links", str(result.statistics["markdown_links"]))
+        table.add_row("Broken Links", str(result.statistics["broken_links"]))
         console.print(table)
 
         # 详细结果表
@@ -82,7 +116,7 @@ def process(
             detail_table.add_row(
                 r.document_title[:50],
                 str(r.chunks_count),
-                str(r.output_path) if r.output_path else "Failed"
+                str(r.output_path) if r.output_path else "Failed",
             )
         console.print(detail_table)
     else:
@@ -92,14 +126,18 @@ def process(
         table.add_column("Value", style="green")
         table.add_row("Title", result.document_title)
         table.add_row("Chunks", str(result.chunks_count))
-        table.add_row("Output", str(result.output_path) if result.output_path else "N/A")
+        table.add_row(
+            "Output", str(result.output_path) if result.output_path else "N/A"
+        )
         console.print(table)
 
 
 @app.command()
 def batch(
     sources_file: Path = typer.Argument(..., help="包含来源列表的文件 (每行一个)"),
-    config_path: Optional[str] = typer.Option(None, "--config", "-c", help="配置文件路径"),
+    config_path: Optional[str] = typer.Option(
+        None, "--config", "-c", help="配置文件路径"
+    ),
 ):
     """批量处理多个文档"""
     config = load_config(config_path) if config_path else load_config()
@@ -125,7 +163,7 @@ def batch(
         table.add_row(
             r.document_title[:50],
             str(r.chunks_count),
-            str(r.output_path) if r.output_path else "Failed"
+            str(r.output_path) if r.output_path else "Failed",
         )
     console.print(table)
 
@@ -134,7 +172,9 @@ def batch(
 def serve(
     host: str = typer.Option("127.0.0.1", "--host", "-h", help="监听地址"),
     port: int = typer.Option(8000, "--port", "-p", help="监听端口"),
-    config_path: Optional[str] = typer.Option(None, "--config", "-c", help="配置文件路径"),
+    config_path: Optional[str] = typer.Option(
+        None, "--config", "-c", help="配置文件路径"
+    ),
 ):
     """启动API服务"""
     import uvicorn
