@@ -1,13 +1,11 @@
 """爬虫模块测试"""
+
 import pytest
 import tempfile
 from pathlib import Path
 from unittest.mock import Mock, patch, MagicMock
 
-from src.crawler import (
-    URLCrawler, LocalFileCrawler, PDFCrawler, Crawler,
-    CrawlResult
-)
+from src.crawler import URLCrawler, LocalFileCrawler, PDFCrawler, Crawler, CrawlResult
 from src.models import SourceType, DocFormat
 
 
@@ -18,7 +16,7 @@ class TestURLCrawler:
     def url_crawler(self):
         return URLCrawler()
 
-    @patch('src.crawler.requests.get')
+    @patch("src.crawler.requests.get")
     def test_crawl_basic(self, mock_get, url_crawler):
         """测试基本URL爬取"""
         mock_response = Mock()
@@ -46,7 +44,7 @@ class TestURLCrawler:
         assert "This is the content" in result.document.content
         assert result.document.format == DocFormat.HTML
 
-    @patch('src.crawler.requests.get')
+    @patch("src.crawler.requests.get")
     def test_crawl_no_article(self, mock_get, url_crawler):
         """测试无article标签的页面"""
         mock_response = Mock()
@@ -69,7 +67,7 @@ class TestURLCrawler:
 
         assert "Content here" in result.document.content
 
-    @patch('src.crawler.requests.get')
+    @patch("src.crawler.requests.get")
     def test_crawl_error(self, mock_get, url_crawler):
         """测试请求错误处理"""
         mock_get.side_effect = Exception("Connection error")
@@ -78,6 +76,83 @@ class TestURLCrawler:
 
         assert len(result.errors) > 0
         assert "Connection error" in result.errors[0]
+
+    def test_discover_links(self, url_crawler):
+        """测试从页面发现链接"""
+        from bs4 import BeautifulSoup
+
+        html = """
+        <html>
+            <body>
+                <a href="/page1">Page 1</a>
+                <a href="/page2">Page 2</a>
+                <a href="https://other.com/page">External</a>
+                <a href="mailto:test@example.com">Email</a>
+                <a href="javascript:void(0)">JS Link</a>
+            </body>
+        </html>
+        """
+        soup = BeautifulSoup(html, "html.parser")
+        links = url_crawler.discover_links(soup, "https://example.com/")
+
+        assert "https://example.com/page1" in links
+        assert "https://example.com/page2" in links
+        assert "https://other.com/page" in links
+        assert len(links) == 3  # 排除 mailto 和 javascript
+
+    def test_match_pattern(self, url_crawler):
+        """测试URL模式匹配"""
+        # 无模式 - 匹配所有
+        assert url_crawler.match_pattern("https://example.com/page", None) == True
+        assert url_crawler.match_pattern("https://example.com/page", []) == True
+
+        # glob 模式
+        assert (
+            url_crawler.match_pattern("https://example.com/docs/page.md", ["*.md"])
+            == True
+        )
+        assert (
+            url_crawler.match_pattern("https://example.com/docs/page.txt", ["*.md"])
+            == False
+        )
+        assert (
+            url_crawler.match_pattern("https://example.com/docs/page", ["*/docs/*"])
+            == True
+        )
+        assert (
+            url_crawler.match_pattern("https://example.com/api/page", ["*/docs/*"])
+            == False
+        )
+
+    def test_merge_documents(self, url_crawler):
+        """测试文档合并"""
+        from src.models import Document
+
+        docs = [
+            Document(
+                id="1",
+                source_type=SourceType.URL,
+                source_path="https://example.com/1",
+                title="Page 1",
+                content="Content 1",
+            ),
+            Document(
+                id="2",
+                source_type=SourceType.URL,
+                source_path="https://example.com/2",
+                title="Page 2",
+                content="Content 2",
+            ),
+        ]
+
+        merged = url_crawler.merge_documents(docs, "https://example.com")
+
+        assert merged.title == "合并文档 (2 页)"
+        assert "Page 1" in merged.content
+        assert "Page 2" in merged.content
+        assert "Content 1" in merged.content
+        assert "Content 2" in merged.content
+        assert merged.metadata["merged_count"] == 2
 
 
 class TestLocalFileCrawler:
@@ -144,7 +219,7 @@ class TestPDFCrawler:
     def pdf_crawler(self):
         return PDFCrawler()
 
-    @patch('src.crawler.fitz.open')
+    @patch("src.crawler.fitz.open")
     def test_crawl_pdf(self, mock_fitz_open, pdf_crawler, tmp_path):
         """测试PDF爬取"""
         # 模拟PDF文档
@@ -161,7 +236,7 @@ class TestPDFCrawler:
         pdf_file = tmp_path / "test.pdf"
         pdf_file.touch()
 
-        with patch.object(Path, 'stat'):
+        with patch.object(Path, "stat"):
             result = pdf_crawler.crawl(pdf_file)
 
         assert result.document.source_type == SourceType.PDF
@@ -169,7 +244,7 @@ class TestPDFCrawler:
         assert "Page content" in result.document.content
         mock_doc.close.assert_called_once()
 
-    @patch('src.crawler.fitz.open')
+    @patch("src.crawler.fitz.open")
     def test_crawl_pdf_error(self, mock_fitz_open, pdf_crawler, tmp_path):
         """测试PDF错误处理"""
         mock_fitz_open.side_effect = Exception("PDF read error")
@@ -190,7 +265,7 @@ class TestCrawler:
     def crawler(self):
         return Crawler()
 
-    @patch('src.crawler.URLCrawler.crawl')
+    @patch("src.crawler.URLCrawler.crawl")
     def test_crawl_url(self, mock_crawl, crawler):
         """测试URL自动识别"""
         mock_crawl.return_value = Mock(document=Mock())
@@ -199,7 +274,7 @@ class TestCrawler:
 
         mock_crawl.assert_called_once()
 
-    @patch('src.crawler.LocalFileCrawler.crawl')
+    @patch("src.crawler.LocalFileCrawler.crawl")
     def test_crawl_local(self, mock_crawl, crawler):
         """测试本地文件自动识别"""
         mock_crawl.return_value = iter([Mock(document=Mock())])
@@ -209,7 +284,7 @@ class TestCrawler:
 
         mock_crawl.assert_called_once()
 
-    @patch('src.crawler.PDFCrawler.crawl')
+    @patch("src.crawler.PDFCrawler.crawl")
     def test_crawl_pdf(self, mock_crawl, crawler):
         """测试PDF自动识别"""
         mock_crawl.return_value = Mock(document=Mock())
