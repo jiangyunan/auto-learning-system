@@ -82,6 +82,13 @@ chunker:
 cache:
   enabled: true
   db_path: ./data/cache.db
+
+# URL 递归采集配置 (可选)
+crawl:
+  patterns:
+    - "*.md"
+    - "*/docs/*"
+  max_depth: 3
 ```
 
 支持环境变量：`${VAR_NAME}` 语法可在配置中使用。
@@ -109,7 +116,32 @@ uv run python -m src.cli process ./my-obsidian-vault/ --no-related-context
 # 处理文件夹（非递归）
 uv run python -m src.cli process ./folder/ --no-recursive
 
-# 批量处理（从文件读取来源列表）
+### URL 递归采集
+
+处理单个 URL 时，可指定链接模式递归采集所有匹配的子页面，内容自动合并为单个文档：
+
+```bash
+# 递归采集所有 .md 页面（默认深度3）
+uv run python -m src.cli process https://docs.example.com \
+  --pattern "*.md"
+
+# 指定递归深度
+uv run python -m src.cli process https://docs.example.com/guide/ \
+  --pattern "*/guide/*" \
+  --max-depth 5
+
+# 多个匹配模式
+uv run python -m src.cli process https://docs.example.com \
+  --pattern "*/docs/*" \
+  --pattern "*/api/*"
+```
+
+**模式匹配说明：**
+- `*.md` - 匹配所有 .md 结尾的 URL
+- `*/docs/*` - 匹配路径包含 /docs/ 的 URL
+- 支持多个 `--pattern` 参数
+
+**批量处理（从文件读取来源列表）**
 echo "https://example.com/page1" > sources.txt
 echo "./local/doc.md" >> sources.txt
 uv run python -m src.cli batch sources.txt
