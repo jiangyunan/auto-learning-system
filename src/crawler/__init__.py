@@ -3,6 +3,7 @@
 import fnmatch
 import hashlib
 import re
+import time
 from pathlib import Path
 from typing import Iterator
 from urllib.parse import urljoin, urlparse
@@ -101,9 +102,9 @@ class URLCrawler(BaseCrawler):
     def crawl_recursive(
         self,
         url: str,
-        patterns: list[str] = None,
+        patterns: list[str] | None = None,
         max_depth: int = 3,
-        visited: set = None,
+        visited: set | None = None,
         download_images: bool = False,
         image_dir: Path = None,
     ) -> CrawlResult:
@@ -165,6 +166,7 @@ class URLCrawler(BaseCrawler):
                         child_urls.append(link)
 
             for child_url in child_urls:
+                time.sleep(0.1)
                 child_result = self.crawl_recursive(
                     child_url,
                     patterns=patterns,
@@ -282,14 +284,12 @@ class URLCrawler(BaseCrawler):
                 links.append(full_url)
         return list(set(links))
 
-    def match_pattern(self, url: str, patterns: list[str]) -> bool:
+    def match_pattern(self, url: str, patterns: list[str] | None) -> bool:
         """判断URL是否匹配任一模式"""
         if not patterns:
             return True
-        parsed = urlparse(url)
-        path = parsed.path
         for pattern in patterns:
-            if fnmatch.fnmatch(path, pattern) or fnmatch.fnmatch(url, pattern):
+            if fnmatch.fnmatch(url, pattern):
                 return True
         return False
 
