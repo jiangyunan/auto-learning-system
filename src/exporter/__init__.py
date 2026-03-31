@@ -193,6 +193,17 @@ class MarkdownExporter(BaseExporter):
                     lines.append(exp)
                 lines.append("")
 
+        # 原文正文
+        if result.original_content:
+            formatted_content = self._format_original_content(result.original_content)
+            if formatted_content:
+                lines.append("---")
+                lines.append("")
+                lines.append("## 原文正文")
+                lines.append("")
+                lines.append(formatted_content)
+                lines.append("")
+
         return "\n".join(lines)
 
 
