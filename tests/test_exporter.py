@@ -1,10 +1,9 @@
 """导出模块测试"""
 
 import pytest
-from pathlib import Path
 from datetime import datetime
 
-from src.exporter import MarkdownExporter, ObsidianExporter, Exporter, ExportResult
+from src.exporter import MarkdownExporter, ObsidianExporter, Exporter
 from src.models import ProcessResult, SummaryL1, SummaryL2
 from src.config import OutputConfig
 
@@ -148,7 +147,7 @@ Copyright © 2024
         result = exporter._format_original_content(content)
 
         # 验证连续重复被压缩
-        lines = [l for l in result.split("\n") if l.strip()]
+        lines = [line for line in result.split("\n") if line.strip()]
         assert lines == ["行1", "行2", "行3"]
 
     def test_format_original_content_empty(self, output_config):
