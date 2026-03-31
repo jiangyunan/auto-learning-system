@@ -273,21 +273,21 @@ class ObsidianExporter(BaseExporter):
                 lines.append(f"**{term}**: {explanation}")
                 lines.append("")
 
-            if result.l2_summary.code_examples:
-                lines.append("### 代码示例")
-                lines.append("")
-                for item in result.l2_summary.code_examples:
-                    lang = item.get("language", "")
-                    code = item.get("code", "")
-                    exp = item.get("explanation", "")
+        if result.l2_summary.code_examples:
+            lines.append("### 代码示例")
+            lines.append("")
+            for item in result.l2_summary.code_examples:
+                lang = item.get("language", "")
+                code = item.get("code", "")
+                exp = item.get("explanation", "")
 
-                    lines.append(f"```{lang}")
-                    lines.append(code)
-                    lines.append("```")
-                    if exp:
-                        lines.append("")
-                        lines.append(f"> {exp}")
+                lines.append(f"```{lang}")
+                lines.append(code)
+                lines.append("```")
+                if exp:
                     lines.append("")
+                    lines.append(f"> {exp}")
+                lines.append("")
 
         return "\n".join(lines)
 
