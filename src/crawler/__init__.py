@@ -6,7 +6,7 @@ import re
 import time
 from pathlib import Path
 from typing import Iterator
-from urllib.parse import urljoin, urlparse
+from urllib.parse import urljoin, urlparse, urlunparse
 from dataclasses import dataclass
 
 import requests
@@ -14,7 +14,6 @@ import fitz  # PyMuPDF
 from bs4 import BeautifulSoup
 
 from src.models import Document, SourceType, DocFormat, ImageInfo, Link, DocumentGraph
-
 
 WIKI_LINK_PATTERN = re.compile(r"\[\[([^\]|]+)(?:\|[^\]]*)?\]\]")
 MARKDOWN_LINK_PATTERN = re.compile(r"\[([^\]]*)\]\(([^)]+)\)")
@@ -28,6 +27,9 @@ class CrawlResult:
     document: Document
     images_downloaded: int = 0
     errors: list[str] = None
+    links_found: int = 0  # 页面上发现的所有链接数量
+    links_matched: int = 0  # 匹配pattern的链接数量
+    pages_crawled: int = 1  # 实际爬取的页面数量（包含递归）
 
     def __post_init__(self):
         if self.errors is None:
@@ -50,6 +52,18 @@ class BaseCrawler:
 
 class URLCrawler(BaseCrawler):
     """URL爬虫"""
+
+    @staticmethod
+    def _normalize_url(url: str) -> str:
+        """归一化URL：去除锚点，统一尾部斜杠"""
+        parsed = urlparse(url)
+        path = parsed.path
+        # 如果路径没有文件扩展名（非 .html/.pdf 等），统一加尾部斜杠
+        if path and not path.endswith("/") and "." not in path.rsplit("/", 1)[-1]:
+            path = path + "/"
+        return urlunparse(
+            (parsed.scheme, parsed.netloc, path, parsed.params, parsed.query, "")
+        )
 
     def crawl(
         self, url: str, download_images: bool = False, image_dir: Path = None
@@ -122,6 +136,9 @@ class URLCrawler(BaseCrawler):
         Returns:
             CrawlResult: 合并后的文档及统计信息
         """
+        # 归一化URL
+        url = self._normalize_url(url)
+
         if visited is None:
             visited = set()
 
@@ -161,9 +178,11 @@ class URLCrawler(BaseCrawler):
 
             if max_depth > 0:
                 links = self.discover_links(soup, url)
+                result.links_found = len(links)
                 for link in links:
                     if link not in visited and self.match_pattern(link, patterns):
                         child_urls.append(link)
+                result.links_matched = len(child_urls)
 
             for child_url in child_urls:
                 time.sleep(0.1)
@@ -178,6 +197,9 @@ class URLCrawler(BaseCrawler):
                 if child_result.document.content:
                     documents.append(child_result.document)
                 result.errors.extend(child_result.errors)
+                result.pages_crawled += child_result.pages_crawled
+                result.links_found += child_result.links_found
+                result.links_matched += child_result.links_matched
 
             merged_doc = self.merge_documents(documents, url)
             result.document = merged_doc
@@ -200,20 +222,32 @@ class URLCrawler(BaseCrawler):
         return ""
 
     def _extract_content(self, soup: BeautifulSoup) -> str:
-        """提取主要内容"""
-        # 尝试常见的内容容器
-        for selector in [
+        """提取主要内容（智能选择最长且有效的内容）"""
+        MIN_CONTENT_LENGTH = 500  # 最小有效内容长度
+
+        # 尝试所有选择器，选择最长的有效内容
+        contents = []
+        selectors = [
+            "main",  # main 通常包含完整内容，优先检查
             "article",
-            "main",
             ".content",
             ".article-content",
             ".post-content",
             ".markdown-body",
             "[role='main']",
-        ]:
+        ]
+
+        for selector in selectors:
             elem = soup.select_one(selector)
             if elem:
-                return elem.get_text(separator="\n", strip=True)
+                text = elem.get_text(separator="\n", strip=True)
+                if len(text) >= MIN_CONTENT_LENGTH:
+                    contents.append((selector, text))
+
+        # 选择最长的内容
+        if contents:
+            best_selector, best_content = max(contents, key=lambda x: len(x[1]))
+            return best_content
 
         # 回退：提取body文本
         body = soup.find("body")
@@ -272,7 +306,7 @@ class URLCrawler(BaseCrawler):
         return images
 
     def discover_links(self, soup: BeautifulSoup, base_url: str) -> list[str]:
-        """从页面发现所有链接"""
+        """从页面发现所有链接（去除锚点，归一化URL）"""
         links = []
         for a in soup.find_all("a", href=True):
             href = a["href"]
@@ -281,7 +315,7 @@ class URLCrawler(BaseCrawler):
             full_url = urljoin(base_url, href)
             parsed = urlparse(full_url)
             if parsed.scheme in ("http", "https"):
-                links.append(full_url)
+                links.append(self._normalize_url(full_url))
         return list(set(links))
 
     def match_pattern(self, url: str, patterns: list[str] | None) -> bool:
@@ -293,6 +327,71 @@ class URLCrawler(BaseCrawler):
                 return True
         return False
 
+    def discover_all_links(
+        self,
+        url: str,
+        patterns: list[str] | None = None,
+        max_depth: int = 3,
+        visited: set | None = None,
+        current_depth: int = 0,
+    ) -> tuple[list[str], list[str]]:
+        """
+        递归发现所有匹配的链接（不实际爬取内容）
+
+        Args:
+            url: 起始URL
+            patterns: 链接匹配模式列表（支持 glob 格式）
+            max_depth: 最大递归深度
+            visited: 已访问URL集合（内部使用）
+            current_depth: 当前深度（内部使用）
+
+        Returns:
+            tuple[list[str], list[str]]: (所有发现的链接, 匹配的链接)
+        """
+        # 归一化URL
+        url = self._normalize_url(url)
+
+        if visited is None:
+            visited = set()
+
+        all_links = []
+        matched_links = []
+
+        if url in visited or current_depth > max_depth:
+            return all_links, matched_links
+
+        visited.add(url)
+
+        try:
+            response = requests.get(url, headers=self.headers, timeout=self.timeout)
+            response.raise_for_status()
+            response.encoding = response.apparent_encoding or "utf-8"
+
+            soup = BeautifulSoup(response.text, "html.parser")
+            links = self.discover_links(soup, url)
+
+            for link in links:
+                all_links.append(link)
+                if link not in visited and self.match_pattern(link, patterns):
+                    matched_links.append(link)
+                    # 递归发现子链接
+                    if current_depth < max_depth:
+                        time.sleep(0.05)  # 短暂延迟避免请求过快
+                        sub_all, sub_matched = self.discover_all_links(
+                            link,
+                            patterns=patterns,
+                            max_depth=max_depth,
+                            visited=visited,
+                            current_depth=current_depth + 1,
+                        )
+                        all_links.extend(sub_all)
+                        matched_links.extend(sub_matched)
+
+        except Exception as e:
+            pass  # 忽略错误，继续处理其他链接
+
+        return list(set(all_links)), list(set(matched_links))
+
     def merge_documents(self, documents: list[Document], base_url: str) -> Document:
         """合并多个文档为一个"""
         if not documents:
@@ -300,15 +399,34 @@ class URLCrawler(BaseCrawler):
         if len(documents) == 1:
             return documents[0]
 
+        # 递归收集所有 source_urls
+        all_source_urls = []
+        for doc in documents:
+            all_source_urls.append(doc.source_path)
+            # 如果子文档是合并文档，也包含它的 source_urls
+            if doc.metadata and "source_urls" in doc.metadata:
+                all_source_urls.extend(doc.metadata["source_urls"])
+
+        # 去重保持顺序
+        seen = set()
+        unique_urls = []
+        for url in all_source_urls:
+            if url not in seen:
+                seen.add(url)
+                unique_urls.append(url)
+
+        first_title = (
+            documents[0].title if documents and documents[0].title else "Untitled"
+        )
         merged = Document(
             id=self._generate_id(base_url),
             source_type=SourceType.URL,
             source_path=base_url,
-            title=f"合并文档 ({len(documents)} 页)",
+            title=f"{first_title} ({len(unique_urls)} 页)",
         )
 
         parts = [f"> 来源: {base_url}"]
-        parts.append(f"> 采集页面数: {len(documents)}\n")
+        parts.append(f"> 采集页面数: {len(unique_urls)}\n")
 
         for i, doc in enumerate(documents, 1):
             parts.append(f"---\n\n## Page {i}: {doc.title or 'Untitled'}")
@@ -317,10 +435,11 @@ class URLCrawler(BaseCrawler):
 
         merged.content = "\n".join(parts)
         merged.format = DocFormat.MARKDOWN
+
         merged.metadata = {
             "url": base_url,
-            "merged_count": len(documents),
-            "source_urls": [doc.source_path for doc in documents],
+            "merged_count": len(unique_urls),
+            "source_urls": unique_urls,
         }
         return merged
 
@@ -662,3 +781,14 @@ class Crawler:
             return self.crawl_pdf(source, **kwargs)
 
         return self.crawl_local(source, **kwargs)
+
+    def discover_links(
+        self,
+        url: str,
+        patterns: list[str] | None = None,
+        max_depth: int = 3,
+    ) -> tuple[list[str], list[str]]:
+        """发现所有匹配的链接（不实际爬取）"""
+        return self.url_crawler.discover_all_links(
+            url, patterns=patterns, max_depth=max_depth
+        )

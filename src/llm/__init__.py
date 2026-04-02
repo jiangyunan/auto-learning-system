@@ -1,5 +1,7 @@
 """LLM客户端模块 - OpenAI兼容接口"""
+
 import json
+import re
 from typing import AsyncIterator, Optional
 from dataclasses import dataclass
 
@@ -9,9 +11,25 @@ from openai import AsyncOpenAI
 from src.config import LLMConfig
 
 
+def _extract_json_from_text(text: str) -> str:
+    """从文本中提取 JSON，支持 markdown code block"""
+    # 尝试匹配 ```json ... ``` 或 ``` ... ```
+    pattern = r"```(?:json)?\s*\n?([\s\S]*?)\n?```"
+    matches = re.findall(pattern, text)
+    if matches:
+        return matches[0].strip()
+    # 尝试匹配第一个 {...}
+    pattern = r"(\{[\s\S]*\})"
+    matches = re.findall(pattern, text)
+    if matches:
+        return matches[0].strip()
+    return text.strip()
+
+
 @dataclass
 class LLMResponse:
     """LLM响应"""
+
     content: str
     usage: Optional[dict] = None
     model: str = ""
@@ -25,6 +43,7 @@ class LLMClient:
         self.client = AsyncOpenAI(
             base_url=config.base_url,
             api_key=config.api_key,
+            timeout=config.timeout,
         )
 
     async def complete(
@@ -82,6 +101,7 @@ class LLMClient:
         system_prompt: Optional[str] = None,
         temperature: Optional[float] = None,
         schema: Optional[dict] = None,
+        max_tokens: Optional[int] = None,
     ) -> dict:
         """请求JSON格式的响应"""
         messages = []
@@ -101,11 +121,18 @@ class LLMClient:
             model=self.config.model,
             messages=messages,
             temperature=temperature or self.config.temperature,
+            max_tokens=max_tokens or self.config.max_tokens,
             response_format={"type": "json_object"},
         )
 
         content = response.choices[0].message.content or "{}"
-        return json.loads(content)
+
+        # JSON解析容错：先尝试直接解析，失败则尝试提取markdown code block
+        try:
+            return json.loads(content)
+        except json.JSONDecodeError:
+            extracted = _extract_json_from_text(content)
+            return json.loads(extracted)
 
     async def health_check(self) -> bool:
         """检查LLM服务是否可用"""

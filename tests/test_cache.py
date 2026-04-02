@@ -1,4 +1,5 @@
 """缓存模块测试"""
+
 import pytest
 import tempfile
 import os
@@ -11,7 +12,7 @@ from src.config import CacheConfig
 @pytest.fixture
 def temp_cache():
     """创建临时缓存实例"""
-    with tempfile.NamedTemporaryFile(suffix='.db', delete=False) as f:
+    with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
         db_path = f.name
 
     config = CacheConfig(enabled=True, db_path=db_path)
@@ -203,7 +204,7 @@ class TestFactory:
 
     def test_create_cache_factory(self):
         """测试缓存工厂函数"""
-        with tempfile.NamedTemporaryFile(suffix='.db', delete=False) as f:
+        with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
             db_path = f.name
 
         try:

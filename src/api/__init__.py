@@ -1,4 +1,5 @@
 """API模块 - FastAPI接口"""
+
 from contextlib import asynccontextmanager
 from typing import AsyncGenerator
 from pathlib import Path
@@ -8,7 +9,6 @@ from pydantic import BaseModel, Field
 
 from src.config import Config
 from src.pipeline import Pipeline, PipelineProgress, FolderProcessResult
-
 
 # 全局配置和pipeline实例
 _app_config: Config = None
@@ -84,7 +84,7 @@ def create_app(config: Config) -> FastAPI:
                 result = await pipeline.process_folder(
                     request.source,
                     recursive=request.recursive,
-                    include_related_context=request.include_related_context
+                    include_related_context=request.include_related_context,
                 )
                 return FolderProcessResponse(
                     total=result.statistics["total"],
@@ -101,11 +101,13 @@ def create_app(config: Config) -> FastAPI:
                             "document_id": r.document_id,
                             "title": r.document_title,
                             "chunks_count": r.chunks_count,
-                            "output_path": str(r.output_path) if r.output_path else None,
+                            "output_path": (
+                                str(r.output_path) if r.output_path else None
+                            ),
                             "success": r.output_path is not None,
                         }
                         for r in result.results
-                    ]
+                    ],
                 )
             else:
                 # 单文件处理
@@ -139,9 +141,7 @@ def create_app(config: Config) -> FastAPI:
 
     @app.post("/folder")
     async def process_folder(
-        path: str,
-        recursive: bool = True,
-        include_related_context: bool = True
+        path: str, recursive: bool = True, include_related_context: bool = True
     ):
         """专门处理文件夹的端点"""
         pipeline = Pipeline(_app_config)
@@ -150,7 +150,7 @@ def create_app(config: Config) -> FastAPI:
             result = await pipeline.process_folder(
                 path,
                 recursive=recursive,
-                include_related_context=include_related_context
+                include_related_context=include_related_context,
             )
             return FolderProcessResponse(
                 total=result.statistics["total"],
@@ -171,7 +171,7 @@ def create_app(config: Config) -> FastAPI:
                         "success": r.output_path is not None,
                     }
                     for r in result.results
-                ]
+                ],
             )
         except Exception as e:
             raise HTTPException(status_code=500, detail=str(e))

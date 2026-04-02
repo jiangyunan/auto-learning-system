@@ -11,24 +11,29 @@ llm:
   # - Ollama: http://localhost:11434/v1
   # - OpenAI: https://api.openai.com/v1
   # - 其他兼容端点: http://your-llm-server/v1
-  base_url: http://localhost:11434/v1
+  base_url: https://api.deepseek.com
+  # base_url: http://localhost:11434/v1
 
   # API 密钥
   # - Ollama: 可设置为任意字符串（如 "ollama"）
   # - OpenAI: 从 https://platform.openai.com/api-keys 获取
   # - 建议使用环境变量: ${OPENAI_API_KEY}
-  api_key: ollama
+  api_key: sk-203c97c316884138ba19948ffa814e0a
+  # api_key: ollama
 
   # 模型名称
   # - Ollama 示例: llama3, mistral, qwen2.5, deepseek-coder
   # - OpenAI 示例: gpt-4, gpt-4-turbo, gpt-3.5-turbo
-  model: llama3
+  model: deepseek-chat
+  # model: deepseek-r1:7b-qwen-distill-q4_K_M
 
   # 采样温度 (0.0 - 2.0)
   # - 较低值 (0.1-0.3): 输出更确定、保守
   # - 较高值 (0.7-1.0): 输出更创造性、多样化
   # - 技术文档建议: 0.3-0.5
   temperature: 0.7
+  max_tokens: 8000
+  timeout: 300
 
 # =============================================================================
 # 输入配置 - 文档处理方式
@@ -58,7 +63,7 @@ output:
   # - 支持相对路径和绝对路径
   # - 目录会自动创建（如果不存在）
   # - 示例: ./vault/, ~/Documents/Notes/, ${HOME}/notes/
-  path: ./vault/
+  path: /mnt/d/KnowledgeBase/知识库/程序猿/AI/LlamaIndex/
 
   # 文件名模板
   # - 可用变量:

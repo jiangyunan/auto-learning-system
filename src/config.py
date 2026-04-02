@@ -1,4 +1,5 @@
 """配置管理模块"""
+
 import os
 import re
 from pathlib import Path
@@ -14,6 +15,8 @@ class LLMConfig:
     api_key: str = "ollama"
     model: str = "llama3"
     temperature: float = 0.7
+    max_tokens: int = 4000  # LLM 输出最大 token 数，防止截断
+    timeout: int = 300  # 请求超时时间（秒），本地模型处理慢需要较长时间
 
 
 @dataclass
@@ -51,7 +54,7 @@ class Config:
 
 def _expand_env_vars(value: str) -> str:
     """展开字符串中的环境变量 ${VAR} 或 $VAR"""
-    pattern = re.compile(r'\$\{(\w+)\}|\$(\w+)')
+    pattern = re.compile(r"\$\{(\w+)\}|\$(\w+)")
 
     def replace_var(match):
         var_name = match.group(1) or match.group(2)
@@ -70,8 +73,7 @@ def _process_dict(data: dict) -> dict:
             result[key] = _process_dict(value)
         elif isinstance(value, list):
             result[key] = [
-                _expand_env_vars(v) if isinstance(v, str) else v
-                for v in value
+                _expand_env_vars(v) if isinstance(v, str) else v for v in value
             ]
         else:
             result[key] = value
@@ -86,18 +88,18 @@ def load_config(config_path: str = "config.yaml") -> Config:
         # 使用默认配置
         return Config()
 
-    with open(path, 'r', encoding='utf-8') as f:
+    with open(path, "r", encoding="utf-8") as f:
         raw_data = yaml.safe_load(f) or {}
 
     # 展开环境变量
     data = _process_dict(raw_data)
 
     # 构建配置对象
-    llm_data = data.get('llm', {})
-    output_data = data.get('output', {})
-    features_data = data.get('features', {})
-    chunker_data = data.get('chunker', {})
-    cache_data = data.get('cache', {})
+    llm_data = data.get("llm", {})
+    output_data = data.get("output", {})
+    features_data = data.get("features", {})
+    chunker_data = data.get("chunker", {})
+    cache_data = data.get("cache", {})
 
     return Config(
         llm=LLMConfig(**llm_data),

@@ -41,7 +41,105 @@ def process(
 
     def progress_callback(p: PipelineProgress):
         if verbose:
-            console.print(f"[{p.stage}] {p.message}")
+            if p.total > 0:
+                percentage = (p.current / p.total) * 100
+                console.print(
+                    f"[bold cyan][{p.stage}][/bold cyan] "
+                    f"[dim]({p.current}/{p.total}, {percentage:.1f}%)[/dim] "
+                    f"{p.message}"
+                )
+            else:
+                console.print(f"[bold cyan][{p.stage}][/bold cyan] {p.message}")
+
+            # 显示详细摘要信息
+            if p.metadata:
+                if p.stage == "crawl":
+                    if "title" in p.metadata:
+                        console.print(f"  页面标题: {p.metadata['title']}")
+                    if "links_found" in p.metadata:
+                        console.print(f"  发现链接: {p.metadata['links_found']} 个")
+                    if "links_matched" in p.metadata:
+                        console.print(f"  匹配链接: {p.metadata['links_matched']} 个")
+                    if "pages_crawled" in p.metadata:
+                        console.print(f"  爬取页面: {p.metadata['pages_crawled']} 个")
+                    if "pages_merged" in p.metadata:
+                        console.print(
+                            f"  成功合并: {p.metadata['pages_merged']} 个页面"
+                        )
+                    if "errors" in p.metadata:
+                        console.print(
+                            f"  [red]错误数量: {p.metadata['errors']} 个[/red]"
+                        )
+                    if "error_details" in p.metadata and p.metadata["error_details"]:
+                        console.print("  [red]错误详情:[/red]")
+                        for error in p.metadata["error_details"]:
+                            console.print(f"    - {error}")
+                elif p.stage == "chunk":
+                    console.print(
+                        f"  内容大小: {p.metadata.get('content_size_kb', 'N/A')} KB ({p.metadata.get('content_size', 'N/A')} 字符)"
+                    )
+                    console.print(
+                        f"  预计分块: {p.metadata.get('estimated_chunks', 'N/A')} 个"
+                    )
+                elif p.stage == "summarize":
+                    if "chunk_index" in p.metadata:
+                        console.print(
+                            f"  当前块: {p.metadata['chunk_index']}/{p.metadata.get('total_chunks', '?')}"
+                        )
+                        console.print(
+                            f"  块大小: {p.metadata.get('chunk_size', 'N/A')} 字符"
+                        )
+                elif p.stage == "export":
+                    console.print(
+                        f"  文档标题: {p.metadata.get('document_title', 'N/A')}"
+                    )
+                    console.print(
+                        f"  分块数量: {p.metadata.get('chunks_count', 'N/A')}"
+                    )
+                    console.print(
+                        f"  L1摘要: {p.metadata.get('l1_bullets', 0)} 个要点, {p.metadata.get('l1_concepts', 0)} 个概念"
+                    )
+                    if p.metadata.get("l2_has_overview"):
+                        console.print(f"  L2摘要: 已生成")
+                elif p.stage == "complete":
+                    if "output_path" in p.metadata:
+                        console.print(f"  导出路径: {p.metadata['output_path']}")
+
+    # 递归采集模式：在 Progress 之前完成链接发现和用户确认
+    confirmed_recursive = False
+    if source.startswith(("http://", "https://")) and pattern:
+        from src.crawler import Crawler
+
+        console.print(f"\n[bold blue]正在发现链接...[/bold blue]")
+        console.print(f"起始URL: {source}")
+        console.print(f"匹配模式: {pattern}")
+        console.print(f"最大深度: {max_depth}")
+
+        # 发现所有匹配的链接
+        all_links, matched_links = pipeline.crawler.discover_links(
+            source, patterns=pattern, max_depth=max_depth
+        )
+
+        console.print(
+            f"\n[bold green]发现 {len(matched_links)} 个匹配的链接:[/bold green]"
+        )
+
+        # 显示匹配的链接
+        for i, link in enumerate(sorted(matched_links), 1):
+            console.print(f"  {i}. {link}")
+
+        if len(matched_links) == 0:
+            console.print("[yellow]没有匹配的链接，退出。[/yellow]")
+            raise typer.Exit()
+
+        # 询问用户确认
+        confirm = console.input("\n[yellow]是否继续爬取这些链接? (y/n): [/yellow]")
+        if confirm.lower() != "y":
+            console.print("[yellow]已取消。[/yellow]")
+            raise typer.Exit()
+
+        console.print(f"\n[bold blue]开始爬取...[/bold blue]\n")
+        confirmed_recursive = True
 
     with Progress(
         SpinnerColumn(),
@@ -65,8 +163,8 @@ def process(
                 return result
             elif source.startswith(("http://", "https://")):
                 # URL处理模式
-                if pattern:
-                    # 递归采集模式
+                if confirmed_recursive:
+                    # 递归采集模式（已通过用户确认）
                     result = await pipeline.process_url_recursive(
                         source,
                         patterns=pattern,
@@ -138,6 +236,7 @@ def batch(
     config_path: Optional[str] = typer.Option(
         None, "--config", "-c", help="配置文件路径"
     ),
+    verbose: bool = typer.Option(False, "--verbose", "-v", help="详细输出"),
 ):
     """批量处理多个文档"""
     config = load_config(config_path) if config_path else load_config()
@@ -148,8 +247,20 @@ def batch(
 
     console.print(f"Processing {len(sources)} sources...")
 
+    def progress_callback(p: PipelineProgress):
+        if verbose:
+            if p.total > 0:
+                percentage = (p.current / p.total) * 100
+                console.print(
+                    f"[bold cyan][{p.stage}][/bold cyan] "
+                    f"[dim]({p.current}/{p.total}, {percentage:.1f}%)[/dim] "
+                    f"{p.message}"
+                )
+            else:
+                console.print(f"[bold cyan][{p.stage}][/bold cyan] {p.message}")
+
     async def run():
-        return await pipeline.process_batch(sources)
+        return await pipeline.process_batch(sources, progress_callback)
 
     results = asyncio.run(run())
 
@@ -216,6 +327,56 @@ chunker:
     else:
         config = load_config()
         console.print(f"Current config: {config}")
+
+
+@app.command()
+def cache(
+    action: str = typer.Argument(
+        ..., help="操作: stats(查看统计), clear(清空), clean(清理旧缓存)"
+    ),
+    config_path: Optional[str] = typer.Option(
+        None, "--config", "-c", help="配置文件路径"
+    ),
+    days: int = typer.Option(
+        30, "--days", "-d", help="清理超过多少天的缓存(仅clean操作)"
+    ),
+):
+    """管理缓存"""
+    from src.cache import create_cache
+
+    config = load_config(config_path) if config_path else load_config()
+    cache_instance = create_cache(config.cache)
+
+    if action == "stats":
+        stats = cache_instance.get_stats()
+        if not stats.get("enabled"):
+            console.print("[yellow]缓存已禁用[/yellow]")
+            return
+
+        table = Table(title="Cache Statistics")
+        table.add_column("Metric", style="cyan")
+        table.add_column("Value", style="green")
+        table.add_row("Total Entries", str(stats["total_entries"]))
+        table.add_row("Total Accesses", str(stats["total_accesses"]))
+        table.add_row("Avg Accesses", str(stats["avg_accesses"]))
+        table.add_row("Newest Entry", str(stats["newest_entry"]))
+        table.add_row("Oldest Entry", str(stats["oldest_entry"]))
+        console.print(table)
+
+    elif action == "clear":
+        confirm = console.input("[red]确定要清空所有缓存? (y/n): [/red]")
+        if confirm.lower() == "y":
+            deleted = cache_instance.clear()
+            console.print(f"[green]已清空 {deleted} 条缓存[/green]")
+        else:
+            console.print("[yellow]已取消[/yellow]")
+
+    elif action == "clean":
+        deleted = cache_instance.cleanup_old(days)
+        console.print(f"[green]已清理 {deleted} 条超过 {days} 天的缓存[/green]")
+
+    else:
+        console.print(f"[red]未知操作: {action}. 可用: stats, clear, clean[/red]")
 
 
 if __name__ == "__main__":

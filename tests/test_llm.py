@@ -1,4 +1,5 @@
 """LLM客户端测试"""
+
 import pytest
 from unittest.mock import Mock, AsyncMock, patch
 import json
@@ -34,7 +35,9 @@ async def test_complete_basic(mock_config, mock_openai_response):
     """测试基本的完成请求"""
     client = LLMClient(mock_config)
 
-    with patch.object(client.client.chat.completions, 'create', new_callable=AsyncMock) as mock_create:
+    with patch.object(
+        client.client.chat.completions, "create", new_callable=AsyncMock
+    ) as mock_create:
         mock_create.return_value = mock_openai_response
 
         response = await client.complete("Hello")
@@ -57,7 +60,9 @@ async def test_complete_with_system_prompt(mock_config, mock_openai_response):
     """测试带系统提示的完成请求"""
     client = LLMClient(mock_config)
 
-    with patch.object(client.client.chat.completions, 'create', new_callable=AsyncMock) as mock_create:
+    with patch.object(
+        client.client.chat.completions, "create", new_callable=AsyncMock
+    ) as mock_create:
         mock_create.return_value = mock_openai_response
 
         await client.complete("Hello", system_prompt="You are helpful")
@@ -75,7 +80,9 @@ async def test_complete_with_custom_temperature(mock_config, mock_openai_respons
     """测试自定义temperature"""
     client = LLMClient(mock_config)
 
-    with patch.object(client.client.chat.completions, 'create', new_callable=AsyncMock) as mock_create:
+    with patch.object(
+        client.client.chat.completions, "create", new_callable=AsyncMock
+    ) as mock_create:
         mock_create.return_value = mock_openai_response
 
         await client.complete("Hello", temperature=0.5)
@@ -99,7 +106,9 @@ async def test_stream(mock_config):
         for chunk in chunks:
             yield chunk
 
-    with patch.object(client.client.chat.completions, 'create', new_callable=AsyncMock) as mock_create:
+    with patch.object(
+        client.client.chat.completions, "create", new_callable=AsyncMock
+    ) as mock_create:
         mock_create.return_value = mock_stream()
 
         result = ""
@@ -118,7 +127,9 @@ async def test_complete_json(mock_config):
     mock_response.choices = [Mock()]
     mock_response.choices[0].message.content = '{"key": "value", "number": 42}'
 
-    with patch.object(client.client.chat.completions, 'create', new_callable=AsyncMock) as mock_create:
+    with patch.object(
+        client.client.chat.completions, "create", new_callable=AsyncMock
+    ) as mock_create:
         mock_create.return_value = mock_response
 
         result = await client.complete_json("Extract data")
@@ -139,7 +150,9 @@ async def test_complete_json_with_schema(mock_config):
     mock_response.choices = [Mock()]
     mock_response.choices[0].message.content = '{"name": "test"}'
 
-    with patch.object(client.client.chat.completions, 'create', new_callable=AsyncMock) as mock_create:
+    with patch.object(
+        client.client.chat.completions, "create", new_callable=AsyncMock
+    ) as mock_create:
         mock_create.return_value = mock_response
 
         schema = {"type": "object", "properties": {"name": {"type": "string"}}}
@@ -162,7 +175,9 @@ async def test_health_check_success(mock_config):
     mock_response.choices = [Mock()]
     mock_response.choices[0].message.content = "hi"
 
-    with patch.object(client.client.chat.completions, 'create', new_callable=AsyncMock) as mock_create:
+    with patch.object(
+        client.client.chat.completions, "create", new_callable=AsyncMock
+    ) as mock_create:
         mock_create.return_value = mock_response
 
         result = await client.health_check()
@@ -174,7 +189,9 @@ async def test_health_check_failure(mock_config):
     """测试健康检查失败"""
     client = LLMClient(mock_config)
 
-    with patch.object(client.client.chat.completions, 'create', new_callable=AsyncMock) as mock_create:
+    with patch.object(
+        client.client.chat.completions, "create", new_callable=AsyncMock
+    ) as mock_create:
         mock_create.side_effect = Exception("Connection error")
 
         result = await client.health_check()

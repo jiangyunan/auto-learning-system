@@ -483,7 +483,7 @@ def test_merge_documents():
     
     merged = crawler.merge_documents(docs, "https://example.com")
     
-    assert merged.title == "合并文档 (2 页)"
+    assert merged.title == "Page 1 (2 页)"
     assert "Page 1" in merged.content
     assert "Page 2" in merged.content
     assert "Content 1" in merged.content

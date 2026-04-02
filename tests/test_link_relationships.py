@@ -1,4 +1,5 @@
 """测试文档链接关系解析"""
+
 import pytest
 from pathlib import Path
 from src.models import Document, SourceType, DocFormat, Link, DocumentGraph
@@ -70,7 +71,7 @@ Also see [[Python]] again for details.
             id="test-1",
             source_type=SourceType.LOCAL_FILE,
             source_path="/test/doc.md",
-            content=content
+            content=content,
         )
 
         links = crawler._extract_links(doc)
@@ -93,7 +94,7 @@ Anchor link [Section](#section) should be ignored.
             id="test-1",
             source_type=SourceType.LOCAL_FILE,
             source_path=str(tmp_path / "doc.md"),
-            content=content
+            content=content,
         )
 
         links = crawler._extract_links(doc)
@@ -114,7 +115,7 @@ Also [[Another|With Alias]] here.
             id="test-1",
             source_type=SourceType.LOCAL_FILE,
             source_path=str(tmp_path / "doc.md"),
-            content=content
+            content=content,
         )
 
         links = crawler._extract_links(doc)
@@ -139,19 +140,19 @@ class TestDocumentGraph:
             id="doc-a",
             source_type=SourceType.LOCAL_FILE,
             source_path="/vault/python.md",
-            title="Python"
+            title="Python",
         )
         doc_b = Document(
             id="doc-b",
             source_type=SourceType.LOCAL_FILE,
             source_path="/vault/async.md",
-            title="Async Programming"
+            title="Async Programming",
         )
         doc_c = Document(
             id="doc-c",
             source_type=SourceType.LOCAL_FILE,
             source_path="/vault/guide.md",
-            title="Guide"
+            title="Guide",
         )
 
         graph.add_document(doc_a)
@@ -159,10 +160,31 @@ class TestDocumentGraph:
         graph.add_document(doc_c)
 
         # B和C都链接到A（A被引用最多，应该优先处理）
-        graph.add_link(Link(source_doc_id="doc-b", target_path="python.md", link_text="Python", link_type="markdown"))
-        graph.add_link(Link(source_doc_id="doc-c", target_path="python.md", link_text="Python", link_type="wiki"))
+        graph.add_link(
+            Link(
+                source_doc_id="doc-b",
+                target_path="python.md",
+                link_text="Python",
+                link_type="markdown",
+            )
+        )
+        graph.add_link(
+            Link(
+                source_doc_id="doc-c",
+                target_path="python.md",
+                link_text="Python",
+                link_type="wiki",
+            )
+        )
         # C还链接到B
-        graph.add_link(Link(source_doc_id="doc-c", target_path="async.md", link_text="Async", link_type="wiki"))
+        graph.add_link(
+            Link(
+                source_doc_id="doc-c",
+                target_path="async.md",
+                link_text="Async",
+                link_type="wiki",
+            )
+        )
 
         return graph
 
@@ -234,7 +256,7 @@ class TestDocumentGraph:
             source_doc_id="doc-c",
             target_path="python",  # 不带.md
             link_text="Python",
-            link_type="wiki"
+            link_type="wiki",
         )
         target = sample_graph._resolve_target("python")
         assert target is not None

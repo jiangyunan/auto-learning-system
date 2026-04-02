@@ -1,11 +1,19 @@
 """数据模型测试"""
+
 import pytest
 from datetime import datetime
 from pathlib import Path
 
 from src.models import (
-    Document, Chunk, SummaryL1, SummaryL2, ProcessResult, CacheEntry,
-    SourceType, DocFormat, ImageInfo
+    Document,
+    Chunk,
+    SummaryL1,
+    SummaryL2,
+    ProcessResult,
+    CacheEntry,
+    SourceType,
+    DocFormat,
+    ImageInfo,
 )
 
 
@@ -18,7 +26,7 @@ def test_document_creation():
         title="Test Article",
         content="This is test content",
         format=DocFormat.HTML,
-        metadata={"author": "test"}
+        metadata={"author": "test"},
     )
 
     assert doc.id == "test-id-123"
@@ -34,9 +42,7 @@ def test_document_creation():
 def test_document_defaults():
     """测试Document默认值"""
     doc = Document(
-        id="test-id",
-        source_type=SourceType.LOCAL_FILE,
-        source_path="/path/to/file.md"
+        id="test-id", source_type=SourceType.LOCAL_FILE, source_path="/path/to/file.md"
     )
 
     assert doc.title == ""
@@ -55,7 +61,7 @@ def test_chunk_creation():
         content="This is chunk content",
         start_pos=0,
         end_pos=100,
-        token_count=25
+        token_count=25,
     )
 
     assert chunk.id == "chunk-1"
@@ -69,7 +75,7 @@ def test_summary_l1_creation():
     """测试SummaryL1创建"""
     summary = SummaryL1(
         bullets=["Point 1", "Point 2", "Point 3"],
-        key_concepts=["Concept A", "Concept B"]
+        key_concepts=["Concept A", "Concept B"],
     )
 
     assert summary.bullets == ["Point 1", "Point 2", "Point 3"]
@@ -84,10 +90,8 @@ def test_summary_l2_creation():
         concepts_explained=[
             {"term": "API", "explanation": "Application Programming Interface"}
         ],
-        code_examples=[
-            {"language": "python", "code": "print('hello')"}
-        ],
-        related_topics=["Topic A", "Topic B"]
+        code_examples=[{"language": "python", "code": "print('hello')"}],
+        related_topics=["Topic A", "Topic B"],
     )
 
     assert summary.overview == "This is an overview"
@@ -108,7 +112,7 @@ def test_process_result_creation():
         chunks_count=3,
         l1_summary=l1,
         l2_summary=l2,
-        output_path=Path("./output/test.md")
+        output_path=Path("./output/test.md"),
     )
 
     assert result.document_id == "doc-1"
@@ -120,10 +124,7 @@ def test_process_result_creation():
 
 def test_cache_entry_creation():
     """测试CacheEntry创建"""
-    entry = CacheEntry(
-        content_hash="abc123hash",
-        result_json='{"summary": "test"}'
-    )
+    entry = CacheEntry(content_hash="abc123hash", result_json='{"summary": "test"}')
 
     assert entry.content_hash == "abc123hash"
     assert entry.result_json == '{"summary": "test"}'
@@ -136,7 +137,7 @@ def test_image_info_creation():
     img = ImageInfo(
         original_url="https://example.com/image.png",
         local_path=Path("./images/image.png"),
-        alt_text="An example image"
+        alt_text="An example image",
     )
 
     assert img.original_url == "https://example.com/image.png"

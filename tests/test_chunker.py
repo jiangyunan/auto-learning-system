@@ -1,4 +1,5 @@
 """分块模块测试"""
+
 import pytest
 
 from src.chunker import Chunker, create_chunker, ChunkerStats
@@ -102,7 +103,9 @@ class TestLargeTextChunking:
         chunker = Chunker(config)
 
         # 创建一个足够长的文本
-        paragraphs = [f"This is paragraph {i} with some content in it." for i in range(10)]
+        paragraphs = [
+            f"This is paragraph {i} with some content in it." for i in range(10)
+        ]
         text = "\n\n".join(paragraphs)
 
         chunks = list(chunker.chunk("doc-1", text))
@@ -133,9 +136,11 @@ class TestLargeTextChunking:
         chunker = Chunker(config)
 
         # 两个足够大的段落，需要分开但应该有重叠
-        text = "First paragraph with enough text to be significant.\n\n" \
-               "Second paragraph also with substantial content here.\n\n" \
-               "Third paragraph continues the document content flow."
+        text = (
+            "First paragraph with enough text to be significant.\n\n"
+            "Second paragraph also with substantial content here.\n\n"
+            "Third paragraph continues the document content flow."
+        )
 
         chunks = list(chunker.chunk("doc-1", text))
 

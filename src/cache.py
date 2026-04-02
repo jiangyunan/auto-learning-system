@@ -1,4 +1,5 @@
 """缓存模块 - SQLite后端"""
+
 import sqlite3
 import hashlib
 import json
@@ -51,7 +52,7 @@ class Cache:
     @staticmethod
     def compute_hash(content: str) -> str:
         """计算内容哈希"""
-        return hashlib.sha256(content.encode('utf-8')).hexdigest()
+        return hashlib.sha256(content.encode("utf-8")).hexdigest()
 
     def get(self, content: str) -> Optional[dict]:
         """获取缓存结果"""
@@ -63,7 +64,7 @@ class Cache:
         with self._get_connection() as conn:
             cursor = conn.execute(
                 "SELECT result_json FROM cache_entries WHERE content_hash = ?",
-                (content_hash,)
+                (content_hash,),
             )
             row = cursor.fetchone()
 
@@ -74,7 +75,7 @@ class Cache:
                        SET accessed_at = CURRENT_TIMESTAMP,
                            access_count = access_count + 1
                        WHERE content_hash = ?""",
-                    (content_hash,)
+                    (content_hash,),
                 )
                 conn.commit()
                 return json.loads(row[0])
@@ -94,7 +95,7 @@ class Cache:
                 """INSERT OR REPLACE INTO cache_entries
                    (content_hash, result_json, created_at, accessed_at, access_count)
                    VALUES (?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 1)""",
-                (content_hash, result_json)
+                (content_hash, result_json),
             )
             conn.commit()
 
@@ -107,8 +108,7 @@ class Cache:
 
         with self._get_connection() as conn:
             cursor = conn.execute(
-                "DELETE FROM cache_entries WHERE content_hash = ?",
-                (content_hash,)
+                "DELETE FROM cache_entries WHERE content_hash = ?", (content_hash,)
             )
             conn.commit()
             return cursor.rowcount > 0
@@ -131,7 +131,9 @@ class Cache:
         with self._get_connection() as conn:
             cursor = conn.execute(
                 """DELETE FROM cache_entries
-                   WHERE accessed_at < datetime('now', '-{} days')""".format(max_age_days)
+                   WHERE accessed_at < datetime('now', '-{} days')""".format(
+                    max_age_days
+                )
             )
             conn.commit()
             return cursor.rowcount

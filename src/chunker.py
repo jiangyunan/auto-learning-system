@@ -1,4 +1,5 @@
 """分块模块 - 智能文本分块"""
+
 import re
 import hashlib
 from typing import Iterator
@@ -13,6 +14,7 @@ from src.models import Chunk
 @dataclass
 class ChunkerStats:
     """分块统计"""
+
     total_chars: int
     total_tokens: int
     chunk_count: int
@@ -33,7 +35,7 @@ class Chunker:
     def _split_into_paragraphs(self, text: str) -> list[str]:
         """将文本分割为段落"""
         # 按空行分割段落
-        paragraphs = re.split(r'\n\s*\n', text.strip())
+        paragraphs = re.split(r"\n\s*\n", text.strip())
         return [p.strip() for p in paragraphs if p.strip()]
 
     def _find_boundary(self, text: str, target_pos: int) -> int:
@@ -42,17 +44,19 @@ class Chunker:
             return len(text)
 
         # 优先寻找段落边界
-        paragraph_match = re.search(r'\n\s*\n', text[target_pos:target_pos + 200])
+        paragraph_match = re.search(r"\n\s*\n", text[target_pos : target_pos + 200])
         if paragraph_match:
             return target_pos + paragraph_match.start()
 
         # 其次寻找句子结束
-        sentence_match = re.search(r'[.!?。！？]\s+', text[target_pos:target_pos + 100])
+        sentence_match = re.search(
+            r"[.!?。！？]\s+", text[target_pos : target_pos + 100]
+        )
         if sentence_match:
             return target_pos + sentence_match.end()
 
         # 退回到空格位置
-        space_match = re.search(r'\s', text[target_pos:target_pos + 50])
+        space_match = re.search(r"\s", text[target_pos : target_pos + 50])
         if space_match:
             return target_pos + space_match.start()
 
@@ -93,22 +97,32 @@ class Chunker:
                 if current_chunk_parts:
                     chunk_content = "\n\n".join(current_chunk_parts)
                     yield self._create_chunk(
-                        document_id, chunk_index, chunk_content,
-                        current_start_pos, position, current_tokens
+                        document_id,
+                        chunk_index,
+                        chunk_content,
+                        current_start_pos,
+                        position,
+                        current_tokens,
                     )
                     chunk_index += 1
 
                     # 添加重叠
                     overlap_text = self._get_overlap(current_chunk_parts)
                     current_chunk_parts = [overlap_text] if overlap_text else []
-                    current_tokens = self.count_tokens(overlap_text) if overlap_text else 0
+                    current_tokens = (
+                        self.count_tokens(overlap_text) if overlap_text else 0
+                    )
                     current_start_pos = position - len(overlap_text)
 
-                # 分割大段落
-                yield from self._split_large_paragraph(
-                    document_id, paragraph, chunk_index, position
+                # 分割大段落，需要先收集所有生成的 chunks 以正确计数
+                large_chunks = list(
+                    self._split_large_paragraph(
+                        document_id, paragraph, chunk_index, position
+                    )
                 )
-                chunk_index += 1
+                for chunk in large_chunks:
+                    yield chunk
+                chunk_index += len(large_chunks)
 
                 current_chunk_parts = []
                 current_tokens = 0
@@ -116,22 +130,30 @@ class Chunker:
                 current_start_pos = position
 
             # 如果累积内容加上新段落超过目标，先刷新
-            elif current_tokens + para_tokens > self.config.target_tokens and current_chunk_parts:
+            elif (
+                current_tokens + para_tokens > self.config.target_tokens
+                and current_chunk_parts
+            ):
                 chunk_content = "\n\n".join(current_chunk_parts)
                 yield self._create_chunk(
-                    document_id, chunk_index, chunk_content,
-                    current_start_pos, position, current_tokens
+                    document_id,
+                    chunk_index,
+                    chunk_content,
+                    current_start_pos,
+                    position,
+                    current_tokens,
                 )
                 chunk_index += 1
 
-                # 添加重叠
+                # 添加重叠，将 overlap 和当前段落一起作为新 chunk 的起始
                 overlap_text = self._get_overlap(current_chunk_parts)
-                current_chunk_parts = [overlap_text, paragraph] if overlap_text else [paragraph]
+                if overlap_text:
+                    current_chunk_parts = [overlap_text, paragraph]
+                    current_start_pos = position - len(overlap_text)
+                else:
+                    current_chunk_parts = [paragraph]
+                    current_start_pos = position
                 current_tokens = sum(self.count_tokens(p) for p in current_chunk_parts)
-                current_start_pos = position - len(overlap_text) if overlap_text else position
-
-                current_chunk_parts = [paragraph]
-                current_tokens = para_tokens
                 position += len(para_with_newline)
 
             else:
@@ -144,15 +166,19 @@ class Chunker:
         if current_chunk_parts:
             chunk_content = "\n\n".join(current_chunk_parts)
             yield self._create_chunk(
-                document_id, chunk_index, chunk_content,
-                current_start_pos, position, current_tokens
+                document_id,
+                chunk_index,
+                chunk_content,
+                current_start_pos,
+                position,
+                current_tokens,
             )
 
     def _split_large_paragraph(
         self, document_id: str, paragraph: str, start_index: int, start_pos: int
     ) -> Iterator[Chunk]:
         """分割大段落为多个块"""
-        sentences = re.split(r'(?<=[.!?。！？])\s+', paragraph)
+        sentences = re.split(r"(?<=[.!?。！？])\s+", paragraph)
         current_sentences = []
         current_tokens = 0
         position = start_pos
@@ -161,12 +187,19 @@ class Chunker:
         for sentence in sentences:
             sent_tokens = self.count_tokens(sentence)
 
-            if current_tokens + sent_tokens > self.config.target_tokens and current_sentences:
+            if (
+                current_tokens + sent_tokens > self.config.target_tokens
+                and current_sentences
+            ):
                 # 创建块
                 chunk_content = " ".join(current_sentences)
                 yield self._create_chunk(
-                    document_id, chunk_index, chunk_content,
-                    start_pos, position, current_tokens
+                    document_id,
+                    chunk_index,
+                    chunk_content,
+                    start_pos,
+                    position,
+                    current_tokens,
                 )
                 chunk_index += 1
 
@@ -186,8 +219,12 @@ class Chunker:
         if current_sentences:
             chunk_content = " ".join(current_sentences)
             yield self._create_chunk(
-                document_id, chunk_index, chunk_content,
-                start_pos, position, current_tokens
+                document_id,
+                chunk_index,
+                chunk_content,
+                start_pos,
+                position,
+                current_tokens,
             )
 
     def _get_overlap(self, paragraphs: list[str]) -> str:
@@ -202,7 +239,7 @@ class Chunker:
         overlap = all_text[-overlap_chars:]
         para_boundary = overlap.find("\n\n")
         if para_boundary > 0:
-            return overlap[para_boundary + 2:]
+            return overlap[para_boundary + 2 :]
 
         return overlap
 
@@ -226,8 +263,13 @@ class Chunker:
         return overlap_sents
 
     def _create_chunk(
-        self, document_id: str, index: int, content: str,
-        start_pos: int, end_pos: int, token_count: int
+        self,
+        document_id: str,
+        index: int,
+        content: str,
+        start_pos: int,
+        end_pos: int,
+        token_count: int,
     ) -> Chunk:
         """创建Chunk对象"""
         return Chunk(

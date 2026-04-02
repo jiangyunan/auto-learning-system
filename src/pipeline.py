@@ -23,6 +23,7 @@ class PipelineProgress:
     current: int
     total: int
     message: str = ""
+    metadata: dict = None
 
 
 @dataclass
@@ -67,22 +68,70 @@ class Pipeline:
 
         doc = crawl_result.document
 
+        # 爬取完成，更新进度带元数据
+        if progress_callback:
+            crawl_metadata = {
+                "title": doc.title or "无标题",
+                "content_size": len(doc.content),
+                "content_size_kb": round(len(doc.content) / 1024, 2),
+            }
+            if hasattr(crawl_result, "images_downloaded"):
+                crawl_metadata["images_downloaded"] = crawl_result.images_downloaded
+            # 添加递归采集的统计信息
+            if hasattr(crawl_result, "links_found"):
+                crawl_metadata["links_found"] = crawl_result.links_found
+            if hasattr(crawl_result, "links_matched"):
+                crawl_metadata["links_matched"] = crawl_result.links_matched
+            if hasattr(crawl_result, "pages_crawled"):
+                crawl_metadata["pages_crawled"] = crawl_result.pages_crawled
+            progress_callback(
+                PipelineProgress(
+                    "crawl",
+                    0,
+                    4,
+                    f"Fetched: {doc.title or 'Untitled'}",
+                    metadata=crawl_metadata,
+                )
+            )
+
         # 2. 分块
         if progress_callback:
-            progress_callback(PipelineProgress("chunk", 1, 4, "Chunking document..."))
+            content_size = len(doc.content)
+            chunks_preview = list(self.chunker.chunk(doc.id, doc.content[:1000]))
+            estimated_chunks = max(1, content_size // 1000 * len(chunks_preview))
+            progress_callback(
+                PipelineProgress(
+                    "chunk",
+                    1,
+                    4,
+                    "Chunking document...",
+                    metadata={
+                        "content_size": content_size,
+                        "content_size_kb": round(content_size / 1024, 2),
+                        "estimated_chunks": estimated_chunks,
+                    },
+                )
+            )
 
         chunks = list(self.chunker.chunk(doc.id, doc.content))
 
         # 3. 生成摘要
-        if progress_callback:
-            progress_callback(
-                PipelineProgress(
-                    "summarize", 2, 4, f"Summarizing {len(chunks)} chunks..."
-                )
-            )
-
         chunk_summaries = []
         for i, chunk in enumerate(chunks):
+            if progress_callback:
+                progress_callback(
+                    PipelineProgress(
+                        "summarize",
+                        2 + i,
+                        4 + len(chunks),
+                        f"Summarizing chunk {i + 1}/{len(chunks)}...",
+                        metadata={
+                            "chunk_index": i + 1,
+                            "total_chunks": len(chunks),
+                            "chunk_size": len(chunk.content),
+                        },
+                    )
+                )
             summary = await self.summarizer.summarize_chunk(chunk)
             chunk_summaries.append(summary)
 
@@ -101,18 +150,50 @@ class Pipeline:
             chunks_count=len(chunks),
             l1_summary=merged_l1,
             l2_summary=merged_l2,
+            original_content=doc.content,
         )
 
         # 5. 导出
+        total_steps = 4 + len(chunks)
         if progress_callback:
-            progress_callback(PipelineProgress("export", 3, 4, "Exporting..."))
+            progress_callback(
+                PipelineProgress(
+                    "export",
+                    total_steps - 1,
+                    total_steps,
+                    "Exporting...",
+                    metadata={
+                        "document_title": doc.title,
+                        "chunks_count": len(chunks),
+                        "l1_bullets": len(merged_l1.bullets) if merged_l1 else 0,
+                        "l1_concepts": len(merged_l1.key_concepts) if merged_l1 else 0,
+                        "l2_has_overview": (
+                            bool(merged_l2.overview) if merged_l2 else False
+                        ),
+                    },
+                )
+            )
 
         export_result = self.exporter.export(result)
         if export_result.success:
             result.output_path = export_result.file_path
 
         if progress_callback:
-            progress_callback(PipelineProgress("complete", 4, 4, "Done!"))
+            complete_metadata = {
+                "document_title": doc.title,
+                "chunks_count": len(chunks),
+            }
+            if result.output_path:
+                complete_metadata["output_path"] = str(result.output_path)
+            progress_callback(
+                PipelineProgress(
+                    "complete",
+                    total_steps,
+                    total_steps,
+                    "Done!",
+                    metadata=complete_metadata,
+                )
+            )
 
         return result
 
@@ -136,20 +217,84 @@ class Pipeline:
 
         doc = crawl_result.document
 
+        # 爬取完成，显示统计信息
         if progress_callback:
-            progress_callback(PipelineProgress("chunk", 1, 4, "Chunking document..."))
+            crawl_metadata = {
+                "title": doc.title or "无标题",
+                "content_size": len(doc.content),
+                "content_size_kb": round(len(doc.content) / 1024, 2),
+            }
+            if hasattr(crawl_result, "links_found"):
+                crawl_metadata["links_found"] = crawl_result.links_found
+            if hasattr(crawl_result, "links_matched"):
+                crawl_metadata["links_matched"] = crawl_result.links_matched
+            if hasattr(crawl_result, "pages_crawled"):
+                crawl_metadata["pages_crawled"] = crawl_result.pages_crawled
+            if hasattr(crawl_result, "errors") and crawl_result.errors:
+                crawl_metadata["errors"] = len(crawl_result.errors)
+                crawl_metadata["error_details"] = crawl_result.errors[
+                    :5
+                ]  # 只显示前5个错误
+            # 从合并文档的metadata中获取实际合并的页面数
+            if doc.metadata and "merged_count" in doc.metadata:
+                crawl_metadata["pages_merged"] = doc.metadata["merged_count"]
+            progress_callback(
+                PipelineProgress(
+                    "crawl",
+                    0,
+                    4,
+                    f"Fetched: {doc.title or 'Untitled'}",
+                    metadata=crawl_metadata,
+                )
+            )
 
         chunks = list(self.chunker.chunk(doc.id, doc.content))
+
+        # 分块完成，显示统计信息
+        if progress_callback:
+            progress_callback(
+                PipelineProgress(
+                    "chunk",
+                    1,
+                    4,
+                    f"Chunked into {len(chunks)} chunks",
+                    metadata={
+                        "chunks_count": len(chunks),
+                        "content_length": len(doc.content),
+                    },
+                )
+            )
+
+        # 计算总步骤数: crawl(0) + chunk(1) + summarize chunks(2 to 2+n-1) + export(2+n) + complete(2+n+1)
+        # 即: 0, 1, 2, 3, ..., n+1, n+2, n+3
+        # 总共 n+4 个步骤 (0-indexed: 0 to n+3)
+        total_steps = (
+            len(chunks) + 3
+        )  # 0: crawl, 1: chunk, 2..n+1: summarize, n+2: export, n+3: complete
 
         if progress_callback:
             progress_callback(
                 PipelineProgress(
-                    "summarize", 2, 4, f"Summarizing {len(chunks)} chunks..."
+                    "summarize", 2, total_steps, f"Summarizing {len(chunks)} chunks..."
                 )
             )
 
         chunk_summaries = []
-        for chunk in chunks:
+        for i, chunk in enumerate(chunks):
+            if progress_callback:
+                progress_callback(
+                    PipelineProgress(
+                        "summarize",
+                        2 + i,
+                        total_steps,
+                        f"Summarizing chunk {i + 1}/{len(chunks)}...",
+                        metadata={
+                            "chunk_index": i + 1,
+                            "total_chunks": len(chunks),
+                            "chunk_size": len(chunk.content),
+                        },
+                    )
+                )
             summary = await self.summarizer.summarize_chunk(chunk)
             chunk_summaries.append(summary)
 
@@ -159,6 +304,7 @@ class Pipeline:
         merged_l1 = await self.summarizer.merge_l1_summaries(l1_summaries)
         merged_l2 = await self.summarizer.merge_l2_summaries(l2_summaries)
 
+        total_steps = 4 + len(chunks)
         result = ProcessResult(
             document_id=doc.id,
             document_title=doc.title,
@@ -166,17 +312,22 @@ class Pipeline:
             chunks_count=len(chunks),
             l1_summary=merged_l1,
             l2_summary=merged_l2,
+            original_content=doc.content,
         )
 
         if progress_callback:
-            progress_callback(PipelineProgress("export", 3, 4, "Exporting..."))
+            progress_callback(
+                PipelineProgress("export", total_steps - 1, total_steps, "Exporting...")
+            )
 
         export_result = self.exporter.export(result)
         if export_result.success:
             result.output_path = export_result.file_path
 
         if progress_callback:
-            progress_callback(PipelineProgress("complete", 4, 4, "Done!"))
+            progress_callback(
+                PipelineProgress("complete", total_steps, total_steps, "Done!")
+            )
 
         return result
 
@@ -347,6 +498,7 @@ class Pipeline:
             chunks_count=len(chunks),
             l1_summary=merged_l1,
             l2_summary=merged_l2,
+            original_content=doc.content,
         )
 
         # 4. 导出

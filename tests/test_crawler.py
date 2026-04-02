@@ -95,9 +95,10 @@ class TestURLCrawler:
         soup = BeautifulSoup(html, "html.parser")
         links = url_crawler.discover_links(soup, "https://example.com/")
 
-        assert "https://example.com/page1" in links
-        assert "https://example.com/page2" in links
-        assert "https://other.com/page" in links
+        # URL被归一化：无扩展名的路径会统一加尾部斜杠
+        assert "https://example.com/page1/" in links
+        assert "https://example.com/page2/" in links
+        assert "https://other.com/page/" in links
         assert len(links) == 3  # 排除 mailto 和 javascript
 
     def test_match_pattern(self, url_crawler):
@@ -147,7 +148,7 @@ class TestURLCrawler:
 
         merged = url_crawler.merge_documents(docs, "https://example.com")
 
-        assert merged.title == "合并文档 (2 页)"
+        assert merged.title == "Page 1 (2 页)"
         assert "Page 1" in merged.content
         assert "Page 2" in merged.content
         assert "Content 1" in merged.content

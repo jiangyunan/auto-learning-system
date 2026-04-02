@@ -18,7 +18,7 @@ output:
   format: markdown
   path: ./output/
 """
-    with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
         f.write(config_content)
         f.flush()
         config_path = f.name
@@ -45,7 +45,7 @@ llm:
   api_key: ${LLM_API_KEY}
   model: llama3
 """
-    with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
         f.write(config_content)
         f.flush()
         config_path = f.name
@@ -63,7 +63,7 @@ def test_default_values():
 llm:
   model: test-model
 """
-    with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
         f.write(config_content)
         f.flush()
         config_path = f.name
