@@ -3,7 +3,7 @@
 import pytest
 
 from src.models import SourceType, DocFormat
-from src.crawler.opencli import OpenCLICrawler
+from src.crawler.opencli import OpenCLICrawler, OpenCLIError
 
 
 def test_source_type_opencli_exists():
@@ -128,3 +128,39 @@ def test_parse_xiaohongshu_note_output():
     assert doc.content == "笔记正文内容..."
     assert doc.format == DocFormat.TEXT
     assert doc.source_type == SourceType.OPENCLI
+
+
+def test_parse_file_output_zhihu(tmp_path):
+    """测试解析知乎下载命令生成的文件"""
+    crawler = OpenCLICrawler()
+    
+    # 创建模拟的 markdown 文件
+    md_file = tmp_path / "test_zhihu.md"
+    md_file.write_text("# 知乎文章标题\n\n这是文章内容。\n", encoding='utf-8')
+    
+    doc = crawler._parse_file_output(
+        str(tmp_path),
+        'zhihu',
+        'download',
+        {'url': ['https://zhuanlan.zhihu.com/p/123']}
+    )
+    
+    assert doc.title == '知乎文章标题'
+    assert '知乎文章标题' in doc.content
+    assert doc.format == DocFormat.MARKDOWN
+    assert doc.source_type == SourceType.OPENCLI
+
+
+def test_parse_file_output_no_markdown(tmp_path):
+    """测试目录中没有 markdown 文件时的错误处理"""
+    crawler = OpenCLICrawler()
+    
+    with pytest.raises(OpenCLIError) as exc_info:
+        crawler._parse_file_output(
+            str(tmp_path),
+            'zhihu',
+            'download',
+            {'url': ['https://example.com']}
+        )
+    
+    assert '未找到导出文件' in str(exc_info.value)

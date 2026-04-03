@@ -2,6 +2,8 @@
 
 import hashlib
 import json
+import re
+from pathlib import Path
 from typing import Optional
 from urllib.parse import urlparse, parse_qs
 
@@ -135,3 +137,60 @@ class OpenCLICrawler:
     def _generate_id(self, source: str) -> str:
         """生成文档 ID"""
         return hashlib.sha256(source.encode()).hexdigest()[:16]
+
+    def _parse_file_output(self, output_dir: str, site: str, command: str, params: dict) -> Document:
+        """解析文件产出型命令生成的文件
+        
+        Args:
+            output_dir: 输出目录路径
+            site: 站点名称
+            command: 命令名称
+            params: 命令参数
+            
+        Returns:
+            Document: 转换后的文档
+            
+        Raises:
+            OpenCLIError: 未找到生成的文件
+        """
+        output_path = Path(output_dir)
+        
+        # 查找 markdown 文件
+        md_files = list(output_path.glob('*.md'))
+        if not md_files:
+            raise OpenCLIError('未找到导出文件，请检查 opencli 是否成功执行')
+        
+        # 取第一个 markdown 文件
+        md_file = md_files[0]
+        content = md_file.read_text(encoding='utf-8')
+        
+        # 提取标题（从第一行 # 开头的标题或文件名）
+        title = self._extract_title_from_markdown(content) or md_file.stem
+        
+        doc_id = self._generate_id(str(md_file))
+        
+        # 获取原始 URL
+        original_url = params.get('url', [''])[0] if 'url' in params else ''
+        
+        return Document(
+            id=doc_id,
+            source_type=SourceType.OPENCLI,
+            source_path=f'opencli://{site}/{command}',
+            title=title,
+            content=content,
+            format=DocFormat.MARKDOWN,
+            metadata={
+                'opencli_site': site,
+                'opencli_command': command,
+                'opencli_raw_output_type': 'file',
+                'generated_file': str(md_file),
+                'original_url': original_url
+            }
+        )
+    
+    def _extract_title_from_markdown(self, content: str) -> str:
+        """从 markdown 内容提取标题"""
+        match = re.search(r'^#\s+(.+)$', content, re.MULTILINE)
+        if match:
+            return match.group(1).strip()
+        return ''
