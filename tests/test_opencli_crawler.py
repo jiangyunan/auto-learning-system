@@ -135,20 +135,20 @@ def test_parse_xiaohongshu_note_output():
 def test_parse_file_output_zhihu(tmp_path):
     """测试解析知乎下载命令生成的文件"""
     crawler = OpenCLICrawler()
-    
+
     # 创建模拟的 markdown 文件
     md_file = tmp_path / "test_zhihu.md"
-    md_file.write_text("# 知乎文章标题\n\n这是文章内容。\n", encoding='utf-8')
-    
+    md_file.write_text("# 知乎文章标题\n\n这是文章内容。\n", encoding="utf-8")
+
     doc = crawler._parse_file_output(
         str(tmp_path),
-        'zhihu',
-        'download',
-        {'url': ['https://zhuanlan.zhihu.com/p/123']}
+        "zhihu",
+        "download",
+        {"url": ["https://zhuanlan.zhihu.com/p/123"]},
     )
-    
-    assert doc.title == '知乎文章标题'
-    assert '知乎文章标题' in doc.content
+
+    assert doc.title == "知乎文章标题"
+    assert "知乎文章标题" in doc.content
     assert doc.format == DocFormat.MARKDOWN
     assert doc.source_type == SourceType.OPENCLI
 
@@ -156,30 +156,27 @@ def test_parse_file_output_zhihu(tmp_path):
 def test_parse_file_output_no_markdown(tmp_path):
     """测试目录中没有 markdown 文件时的错误处理"""
     crawler = OpenCLICrawler()
-    
+
     with pytest.raises(OpenCLIError) as exc_info:
         crawler._parse_file_output(
-            str(tmp_path),
-            'zhihu',
-            'download',
-            {'url': ['https://example.com']}
+            str(tmp_path), "zhihu", "download", {"url": ["https://example.com"]}
         )
-    
-    assert '未找到导出文件' in str(exc_info.value)
+
+    assert "未找到导出文件" in str(exc_info.value)
 
 
 def test_execute_opencli_command_success():
     """测试成功执行 opencli 命令"""
     crawler = OpenCLICrawler()
-    
+
     mock_process = MagicMock()
     mock_process.returncode = 0
     mock_process.stdout = '{"title": "Test", "content": "Content"}'
-    mock_process.stderr = ''
-    
-    with patch('subprocess.run', return_value=mock_process) as mock_run:
-        result = crawler._execute_command(['opencli', 'xiaohongshu', 'note', 'abc123'])
-        
+    mock_process.stderr = ""
+
+    with patch("subprocess.run", return_value=mock_process) as mock_run:
+        result = crawler._execute_command(["opencli", "xiaohongshu", "note", "abc123"])
+
         assert result == '{"title": "Test", "content": "Content"}'
         mock_run.assert_called_once()
 
@@ -187,45 +184,45 @@ def test_execute_opencli_command_success():
 def test_execute_opencli_command_not_found():
     """测试 opencli 未安装的情况"""
     crawler = OpenCLICrawler()
-    
-    with patch('subprocess.run', side_effect=FileNotFoundError()):
+
+    with patch("subprocess.run", side_effect=FileNotFoundError()):
         with pytest.raises(OpenCLIError) as exc_info:
-            crawler._execute_command(['opencli', 'xiaohongshu', 'note', 'abc123'])
-        
-        assert '未安装' in str(exc_info.value)
+            crawler._execute_command(["opencli", "xiaohongshu", "note", "abc123"])
+
+        assert "未安装" in str(exc_info.value)
 
 
 def test_execute_opencli_browser_not_connected():
     """测试浏览器扩展未连接的情况 (exit code 69)"""
     crawler = OpenCLICrawler()
-    
+
     mock_process = MagicMock()
     mock_process.returncode = 69
-    mock_process.stdout = ''
-    mock_process.stderr = 'Browser Bridge not connected'
-    
-    with patch('subprocess.run', return_value=mock_process):
+    mock_process.stdout = ""
+    mock_process.stderr = "Browser Bridge not connected"
+
+    with patch("subprocess.run", return_value=mock_process):
         with pytest.raises(OpenCLIError) as exc_info:
-            crawler._execute_command(['opencli', 'xiaohongshu', 'note', 'abc123'])
-        
-        assert '浏览器扩展未连接' in str(exc_info.value)
+            crawler._execute_command(["opencli", "xiaohongshu", "note", "abc123"])
+
+        assert "浏览器扩展未连接" in str(exc_info.value)
         assert exc_info.value.exit_code == 69
 
 
 def test_execute_opencli_auth_required():
     """测试需要登录的情况 (exit code 77)"""
     crawler = OpenCLICrawler()
-    
+
     mock_process = MagicMock()
     mock_process.returncode = 77
-    mock_process.stdout = ''
-    mock_process.stderr = 'Authentication required'
-    
-    with patch('subprocess.run', return_value=mock_process):
+    mock_process.stdout = ""
+    mock_process.stderr = "Authentication required"
+
+    with patch("subprocess.run", return_value=mock_process):
         with pytest.raises(OpenCLIError) as exc_info:
-            crawler._execute_command(['opencli', 'xiaohongshu', 'note', 'abc123'])
-        
-        assert '登录态' in str(exc_info.value) or '认证' in str(exc_info.value)
+            crawler._execute_command(["opencli", "xiaohongshu", "note", "abc123"])
+
+        assert "登录态" in str(exc_info.value) or "认证" in str(exc_info.value)
         assert exc_info.value.exit_code == 77
 
 
@@ -233,14 +230,16 @@ def test_crawl_xiaohongshu_note_success():
     """测试成功爬取小红书笔记"""
     crawler = OpenCLICrawler()
 
-    mock_output = '{"title": "笔记标题", "content": "笔记内容", "url": "https://xhs.com/123"}'
+    mock_output = (
+        '{"title": "笔记标题", "content": "笔记内容", "url": "https://xhs.com/123"}'
+    )
 
-    with patch.object(crawler, '_execute_command', return_value=mock_output):
-        result = crawler.crawl('opencli://xiaohongshu/note/abc123')
+    with patch.object(crawler, "_execute_command", return_value=mock_output):
+        result = crawler.crawl("opencli://xiaohongshu/note/abc123")
 
         assert isinstance(result, CrawlResult)
-        assert result.document.title == '笔记标题'
-        assert result.document.content == '笔记内容'
+        assert result.document.title == "笔记标题"
+        assert result.document.content == "笔记内容"
         assert result.document.source_type == SourceType.OPENCLI
         assert not result.errors
 
@@ -249,21 +248,23 @@ def test_crawl_not_in_whitelist():
     """测试不在白名单中的命令被拒绝"""
     crawler = OpenCLICrawler()
 
-    result = crawler.crawl('opencli://hackernews/top?limit=5')
+    result = crawler.crawl("opencli://hackernews/top?limit=5")
 
     assert len(result.errors) > 0
-    assert '不支持' in result.errors[0]
+    assert "不支持" in result.errors[0]
 
 
 def test_crawl_opencli_error():
     """测试 opencli 执行失败的情况"""
     crawler = OpenCLICrawler()
 
-    with patch.object(crawler, '_execute_command', side_effect=OpenCLIError('浏览器扩展未连接', 69)):
-        result = crawler.crawl('opencli://xiaohongshu/note/abc123')
+    with patch.object(
+        crawler, "_execute_command", side_effect=OpenCLIError("浏览器扩展未连接", 69)
+    ):
+        result = crawler.crawl("opencli://xiaohongshu/note/abc123")
 
         assert len(result.errors) > 0
-        assert '浏览器扩展未连接' in result.errors[0]
+        assert "浏览器扩展未连接" in result.errors[0]
 
 
 def test_crawler_aggregates_opencli():
@@ -272,8 +273,8 @@ def test_crawler_aggregates_opencli():
 
     crawler = Crawler()
 
-    assert hasattr(crawler, 'opencli_crawler')
-    assert hasattr(crawler, 'crawl_opencli')
+    assert hasattr(crawler, "opencli_crawler")
+    assert hasattr(crawler, "crawl_opencli")
 
 
 def test_crawler_auto_detect_opencli():
@@ -284,8 +285,10 @@ def test_crawler_auto_detect_opencli():
 
     mock_output = '{"title": "Test", "content": "Content"}'
 
-    with patch.object(crawler.opencli_crawler, '_execute_command', return_value=mock_output):
-        result = crawler.crawl('opencli://xiaohongshu/note/abc123')
+    with patch.object(
+        crawler.opencli_crawler, "_execute_command", return_value=mock_output
+    ):
+        result = crawler.crawl("opencli://xiaohongshu/note/abc123")
 
         assert isinstance(result, CrawlResult)
         assert result.document.source_type == SourceType.OPENCLI

@@ -145,62 +145,64 @@ class OpenCLICrawler:
         """生成文档 ID"""
         return hashlib.sha256(source.encode()).hexdigest()[:16]
 
-    def _parse_file_output(self, output_dir: str, site: str, command: str, params: dict) -> Document:
+    def _parse_file_output(
+        self, output_dir: str, site: str, command: str, params: dict
+    ) -> Document:
         """解析文件产出型命令生成的文件
-        
+
         Args:
             output_dir: 输出目录路径
             site: 站点名称
             command: 命令名称
             params: 命令参数
-            
+
         Returns:
             Document: 转换后的文档
-            
+
         Raises:
             OpenCLIError: 未找到生成的文件
         """
         output_path = Path(output_dir)
-        
+
         # 查找 markdown 文件
-        md_files = list(output_path.glob('*.md'))
+        md_files = list(output_path.glob("*.md"))
         if not md_files:
-            raise OpenCLIError('未找到导出文件，请检查 opencli 是否成功执行')
-        
+            raise OpenCLIError("未找到导出文件，请检查 opencli 是否成功执行")
+
         # 取第一个 markdown 文件
         md_file = md_files[0]
-        content = md_file.read_text(encoding='utf-8')
-        
+        content = md_file.read_text(encoding="utf-8")
+
         # 提取标题（从第一行 # 开头的标题或文件名）
         title = self._extract_title_from_markdown(content) or md_file.stem
-        
+
         doc_id = self._generate_id(str(md_file))
-        
+
         # 获取原始 URL
-        original_url = params.get('url', [''])[0] if 'url' in params else ''
-        
+        original_url = params.get("url", [""])[0] if "url" in params else ""
+
         return Document(
             id=doc_id,
             source_type=SourceType.OPENCLI,
-            source_path=f'opencli://{site}/{command}',
+            source_path=f"opencli://{site}/{command}",
             title=title,
             content=content,
             format=DocFormat.MARKDOWN,
             metadata={
-                'opencli_site': site,
-                'opencli_command': command,
-                'opencli_raw_output_type': 'file',
-                'generated_file': str(md_file),
-                'original_url': original_url
-            }
+                "opencli_site": site,
+                "opencli_command": command,
+                "opencli_raw_output_type": "file",
+                "generated_file": str(md_file),
+                "original_url": original_url,
+            },
         )
-    
+
     def _extract_title_from_markdown(self, content: str) -> str:
         """从 markdown 内容提取标题"""
-        match = re.search(r'^#\s+(.+)$', content, re.MULTILINE)
+        match = re.search(r"^#\s+(.+)$", content, re.MULTILINE)
         if match:
             return match.group(1).strip()
-        return ''
+        return ""
 
     def _execute_command(self, cmd: list) -> str:
         """执行 opencli 命令
@@ -216,21 +218,15 @@ class OpenCLICrawler:
         """
         try:
             result = subprocess.run(
-                cmd,
-                capture_output=True,
-                text=True,
-                timeout=300  # 5分钟超时
+                cmd, capture_output=True, text=True, timeout=300  # 5分钟超时
             )
         except FileNotFoundError:
             raise OpenCLIError(
-                'opencli 未安装。请运行: npm install -g @jackwener/opencli',
-                exit_code=127
+                "opencli 未安装。请运行: npm install -g @jackwener/opencli",
+                exit_code=127,
             )
         except subprocess.TimeoutExpired:
-            raise OpenCLIError(
-                'opencli 命令执行超时（5分钟）',
-                exit_code=124
-            )
+            raise OpenCLIError("opencli 命令执行超时（5分钟）", exit_code=124)
 
         # 检查退出码
         if result.returncode != 0:
@@ -250,20 +246,20 @@ class OpenCLICrawler:
             str: 用户友好的错误信息
         """
         exit_code_messages = {
-            2: '命令或参数不合法',
-            69: '浏览器扩展未连接。请安装并启用 opencli Browser Bridge 扩展',
-            77: '目标站点缺少登录态或认证失败。请先在浏览器中登录目标站点',
-            78: '配置错误：缺少凭证或配置不正确',
-            124: '命令执行超时',
-            127: 'opencli 未安装',
-            130: '命令被中断',
+            2: "命令或参数不合法",
+            69: "浏览器扩展未连接。请安装并启用 opencli Browser Bridge 扩展",
+            77: "目标站点缺少登录态或认证失败。请先在浏览器中登录目标站点",
+            78: "配置错误：缺少凭证或配置不正确",
+            124: "命令执行超时",
+            127: "opencli 未安装",
+            130: "命令被中断",
         }
 
         if exit_code in exit_code_messages:
             return exit_code_messages[exit_code]
 
         # 通用错误
-        return f'opencli 执行失败 (exit code {exit_code}): {stderr[:200]}'
+        return f"opencli 执行失败 (exit code {exit_code}): {stderr[:200]}"
 
     def crawl(self, url: str) -> "CrawlResult":
         """爬取 opencli:// 来源
@@ -278,7 +274,7 @@ class OpenCLICrawler:
 
         result = CrawlResult(
             document=Document(
-                id='',
+                id="",
                 source_type=SourceType.OPENCLI,
                 source_path=url,
             )
@@ -287,36 +283,36 @@ class OpenCLICrawler:
         try:
             # 1. 解析 URL
             parsed = self._parse_url(url)
-            site = parsed['site']
-            command = parsed['command']
-            arg = parsed['arg']
-            params = parsed['params']
+            site = parsed["site"]
+            command = parsed["command"]
+            arg = parsed["arg"]
+            params = parsed["params"]
 
             # 2. 白名单校验
             if not self._check_whitelist(site, command, arg):
                 raise OpenCLIError(
-                    f'当前版本不支持 opencli://{site}/{command}。'
+                    f"当前版本不支持 opencli://{site}/{command}。"
                     f'仅支持: {", ".join(sorted(self.whitelist))}'
                 )
 
             # 3. 构建命令
-            cmd = ['opencli', site, command]
+            cmd = ["opencli", site, command]
             if arg:
                 cmd.append(arg)
 
             # 添加命名参数
             for key, values in params.items():
                 for value in values:
-                    cmd.append(f'--{key}')
+                    cmd.append(f"--{key}")
                     cmd.append(value)
 
             # 4. 判断输出类型并执行
-            key = f'{site}/{command}'
+            key = f"{site}/{command}"
 
-            if key in ['xiaohongshu/note', 'bilibili/subtitle']:
+            if key in ["xiaohongshu/note", "bilibili/subtitle"]:
                 # stdout 内容型
-                cmd.append('--format')
-                cmd.append('json')
+                cmd.append("--format")
+                cmd.append("json")
 
                 stdout = self._execute_command(cmd)
                 data = json.loads(stdout)
@@ -324,13 +320,11 @@ class OpenCLICrawler:
                 doc = self._parse_stdout_content(site, command, data)
                 result.document = doc
 
-            elif key in ['zhihu/download', 'weixin/download']:
+            elif key in ["zhihu/download", "weixin/download"]:
                 # 文件产出型
                 with tempfile.TemporaryDirectory() as tmpdir:
-                    cmd.append('--output')
+                    cmd.append("--output")
                     cmd.append(tmpdir)
-                    cmd.append('--format')
-                    cmd.append('json')
 
                     self._execute_command(cmd)
 
@@ -338,10 +332,14 @@ class OpenCLICrawler:
                     result.document = doc
 
         except OpenCLIError as e:
+            if result.errors is None:
+                result.errors = []
             result.errors.append(str(e))
             result.document.id = self._generate_id(url + str(e))
         except Exception as e:
-            result.errors.append(f'未知错误: {str(e)}')
+            if result.errors is None:
+                result.errors = []
+            result.errors.append(f"未知错误: {str(e)}")
             result.document.id = self._generate_id(url + str(e))
 
         return result
