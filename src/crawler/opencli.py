@@ -43,9 +43,14 @@ class OpenCLICrawler:
         parsed = urlparse(f"http://{url_body}")  # 用 http 做解析，实际 scheme 已处理
 
         site = parsed.hostname
+
+        # 添加检查
+        if not site:
+            raise ValueError(f"Missing site in URL: {url}")
+
         path_parts = parsed.path.strip("/").split("/")
 
-        if len(path_parts) < 1:
+        if len(path_parts) < 1 or not path_parts[0]:
             raise ValueError(f"Missing command in URL: {url}")
 
         command = path_parts[0]

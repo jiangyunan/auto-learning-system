@@ -1,5 +1,7 @@
 """OpenCLI 爬虫测试"""
 
+import pytest
+
 from src.models import SourceType
 from src.crawler.opencli import OpenCLICrawler
 
@@ -64,3 +66,24 @@ def test_check_whitelist_blocked():
     assert crawler._check_whitelist("bilibili", "hot", None) is False
     assert crawler._check_whitelist("hackernews", "top", None) is False
     assert crawler._check_whitelist("zhihu", "search", None) is False
+
+
+def test_parse_url_invalid_scheme():
+    """测试无效 URL scheme"""
+    crawler = OpenCLICrawler()
+    with pytest.raises(ValueError, match="Invalid opencli URL"):
+        crawler._parse_url("http://example.com")
+
+
+def test_parse_url_missing_site():
+    """测试缺少 site"""
+    crawler = OpenCLICrawler()
+    with pytest.raises(ValueError, match="Missing site"):
+        crawler._parse_url("opencli:///command")
+
+
+def test_parse_url_missing_command():
+    """测试缺少 command"""
+    crawler = OpenCLICrawler()
+    with pytest.raises(ValueError, match="Missing command"):
+        crawler._parse_url("opencli://xiaohongshu")
