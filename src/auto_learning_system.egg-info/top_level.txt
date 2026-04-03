@@ -2,8 +2,11 @@ __init__
 api
 cache
 chunker
+cli
 config
 crawler
 exporter
 llm
+models
+pipeline
 summarizer

@@ -5,14 +5,13 @@ Summary: 自动学习文档并生成Obsidian笔记
 Requires-Python: >=3.10
 Requires-Dist: pydantic>=2.0
 Requires-Dist: pyyaml
-Requires-Dist: python-dotenv
 Requires-Dist: requests
 Requires-Dist: beautifulsoup4
-Requires-Dist: markdownify
 Requires-Dist: pymupdf
 Requires-Dist: openai
 Requires-Dist: tiktoken
 Requires-Dist: typer
+Requires-Dist: rich
 Requires-Dist: fastapi
 Requires-Dist: uvicorn
 Provides-Extra: dev

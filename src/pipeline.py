@@ -1,12 +1,10 @@
 """Pipeline模块 - 文档处理流程编排"""
 
-import asyncio
 from pathlib import Path
-from typing import AsyncIterator
 from dataclasses import dataclass
 
 from src.config import Config
-from src.models import Document, Chunk, ProcessResult, SourceType, DocumentGraph
+from src.models import Document, ProcessResult, SourceType, DocumentGraph
 from src.crawler import Crawler
 from src.chunker import Chunker
 from src.summarizer import Summarizer

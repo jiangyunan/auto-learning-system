@@ -100,7 +100,7 @@ def process(
                         f"  L1摘要: {p.metadata.get('l1_bullets', 0)} 个要点, {p.metadata.get('l1_concepts', 0)} 个概念"
                     )
                     if p.metadata.get("l2_has_overview"):
-                        console.print(f"  L2摘要: 已生成")
+                        console.print("  L2摘要: 已生成")
                 elif p.stage == "complete":
                     if "output_path" in p.metadata:
                         console.print(f"  导出路径: {p.metadata['output_path']}")
@@ -108,9 +108,8 @@ def process(
     # 递归采集模式：在 Progress 之前完成链接发现和用户确认
     confirmed_recursive = False
     if source.startswith(("http://", "https://")) and pattern:
-        from src.crawler import Crawler
 
-        console.print(f"\n[bold blue]正在发现链接...[/bold blue]")
+        console.print("\n[bold blue]正在发现链接...[/bold blue]")
         console.print(f"起始URL: {source}")
         console.print(f"匹配模式: {pattern}")
         console.print(f"最大深度: {max_depth}")
@@ -138,7 +137,7 @@ def process(
             console.print("[yellow]已取消。[/yellow]")
             raise typer.Exit()
 
-        console.print(f"\n[bold blue]开始爬取...[/bold blue]\n")
+        console.print("\n[bold blue]开始爬取...[/bold blue]\n")
         confirmed_recursive = True
 
     with Progress(

@@ -5,7 +5,7 @@ from datetime import datetime
 from dataclasses import dataclass
 import re
 
-from src.models import ProcessResult, SummaryL1, SummaryL2
+from src.models import ProcessResult
 from src.config import OutputConfig
 
 

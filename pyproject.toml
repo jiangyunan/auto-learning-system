@@ -6,14 +6,13 @@ requires-python = ">=3.10"
 dependencies = [
     "pydantic>=2.0",
     "pyyaml",
-    "python-dotenv",
     "requests",
     "beautifulsoup4",
-    "markdownify",
     "pymupdf",
     "openai",
     "tiktoken",
     "typer",
+    "rich",
     "fastapi",
     "uvicorn",
 ]

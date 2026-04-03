@@ -387,7 +387,7 @@ class URLCrawler(BaseCrawler):
                         all_links.extend(sub_all)
                         matched_links.extend(sub_matched)
 
-        except Exception as e:
+        except Exception:
             pass  # 忽略错误，继续处理其他链接
 
         return list(set(all_links)), list(set(matched_links))

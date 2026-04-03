@@ -1,8 +1,6 @@
 """摘要生成模块 - 两级摘要生成"""
 
-import json
 import logging
-from typing import Optional
 from dataclasses import dataclass
 
 from src.llm import LLMClient

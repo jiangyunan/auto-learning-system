@@ -5,10 +5,10 @@ from typing import AsyncGenerator
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 from src.config import Config
-from src.pipeline import Pipeline, PipelineProgress, FolderProcessResult
+from src.pipeline import Pipeline
 
 # 全局配置和pipeline实例
 _app_config: Config = None

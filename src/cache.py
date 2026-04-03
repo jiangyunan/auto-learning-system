@@ -3,13 +3,11 @@
 import sqlite3
 import hashlib
 import json
-from datetime import datetime
 from pathlib import Path
 from typing import Optional
 from contextlib import contextmanager
 
 from src.config import CacheConfig
-from src.models import CacheEntry
 
 
 class Cache:
