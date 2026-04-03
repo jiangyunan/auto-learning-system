@@ -1,6 +1,7 @@
 """OpenCLI 爬虫测试"""
 
 import pytest
+from unittest.mock import patch, MagicMock
 
 from src.models import SourceType, DocFormat
 from src.crawler.opencli import OpenCLICrawler, OpenCLIError
@@ -164,3 +165,64 @@ def test_parse_file_output_no_markdown(tmp_path):
         )
     
     assert '未找到导出文件' in str(exc_info.value)
+
+
+def test_execute_opencli_command_success():
+    """测试成功执行 opencli 命令"""
+    crawler = OpenCLICrawler()
+    
+    mock_process = MagicMock()
+    mock_process.returncode = 0
+    mock_process.stdout = '{"title": "Test", "content": "Content"}'
+    mock_process.stderr = ''
+    
+    with patch('subprocess.run', return_value=mock_process) as mock_run:
+        result = crawler._execute_command(['opencli', 'xiaohongshu', 'note', 'abc123'])
+        
+        assert result == '{"title": "Test", "content": "Content"}'
+        mock_run.assert_called_once()
+
+
+def test_execute_opencli_command_not_found():
+    """测试 opencli 未安装的情况"""
+    crawler = OpenCLICrawler()
+    
+    with patch('subprocess.run', side_effect=FileNotFoundError()):
+        with pytest.raises(OpenCLIError) as exc_info:
+            crawler._execute_command(['opencli', 'xiaohongshu', 'note', 'abc123'])
+        
+        assert '未安装' in str(exc_info.value)
+
+
+def test_execute_opencli_browser_not_connected():
+    """测试浏览器扩展未连接的情况 (exit code 69)"""
+    crawler = OpenCLICrawler()
+    
+    mock_process = MagicMock()
+    mock_process.returncode = 69
+    mock_process.stdout = ''
+    mock_process.stderr = 'Browser Bridge not connected'
+    
+    with patch('subprocess.run', return_value=mock_process):
+        with pytest.raises(OpenCLIError) as exc_info:
+            crawler._execute_command(['opencli', 'xiaohongshu', 'note', 'abc123'])
+        
+        assert '浏览器扩展未连接' in str(exc_info.value)
+        assert exc_info.value.exit_code == 69
+
+
+def test_execute_opencli_auth_required():
+    """测试需要登录的情况 (exit code 77)"""
+    crawler = OpenCLICrawler()
+    
+    mock_process = MagicMock()
+    mock_process.returncode = 77
+    mock_process.stdout = ''
+    mock_process.stderr = 'Authentication required'
+    
+    with patch('subprocess.run', return_value=mock_process):
+        with pytest.raises(OpenCLIError) as exc_info:
+            crawler._execute_command(['opencli', 'xiaohongshu', 'note', 'abc123'])
+        
+        assert '登录态' in str(exc_info.value) or '认证' in str(exc_info.value)
+        assert exc_info.value.exit_code == 77

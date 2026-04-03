@@ -3,6 +3,7 @@
 import hashlib
 import json
 import re
+import subprocess
 from pathlib import Path
 from typing import Optional
 from urllib.parse import urlparse, parse_qs
@@ -194,3 +195,66 @@ class OpenCLICrawler:
         if match:
             return match.group(1).strip()
         return ''
+
+    def _execute_command(self, cmd: list) -> str:
+        """执行 opencli 命令
+
+        Args:
+            cmd: 命令参数列表
+
+        Returns:
+            str: stdout 输出
+
+        Raises:
+            OpenCLIError: 执行失败
+        """
+        try:
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                timeout=300  # 5分钟超时
+            )
+        except FileNotFoundError:
+            raise OpenCLIError(
+                'opencli 未安装。请运行: npm install -g @jackwener/opencli',
+                exit_code=127
+            )
+        except subprocess.TimeoutExpired:
+            raise OpenCLIError(
+                'opencli 命令执行超时（5分钟）',
+                exit_code=124
+            )
+
+        # 检查退出码
+        if result.returncode != 0:
+            error_msg = self._map_exit_code(result.returncode, result.stderr)
+            raise OpenCLIError(error_msg, exit_code=result.returncode)
+
+        return result.stdout
+
+    def _map_exit_code(self, exit_code: int, stderr: str) -> str:
+        """将退出码映射为清晰错误信息
+
+        Args:
+            exit_code: subprocess 退出码
+            stderr: 标准错误输出
+
+        Returns:
+            str: 用户友好的错误信息
+        """
+        exit_code_messages = {
+            2: '命令或参数不合法',
+            69: '浏览器扩展未连接。请安装并启用 opencli Browser Bridge 扩展',
+            77: '目标站点缺少登录态或认证失败。请先在浏览器中登录目标站点',
+            78: '配置错误：缺少凭证或配置不正确',
+            124: '命令执行超时',
+            127: 'opencli 未安装',
+            130: '命令被中断',
+        }
+
+        if exit_code in exit_code_messages:
+            return exit_code_messages[exit_code]
+
+        # 通用错误
+        return f'opencli 执行失败 (exit code {exit_code}): {stderr[:200]}'
