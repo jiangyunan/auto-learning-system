@@ -13,6 +13,7 @@ class SourceType(Enum):
     URL = "url"
     LOCAL_FILE = "local_file"
     PDF = "pdf"
+    OPENCLI = "opencli"
 
 
 class DocFormat(Enum):
