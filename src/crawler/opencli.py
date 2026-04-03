@@ -1,14 +1,20 @@
 """OpenCLI 爬虫模块 - 处理 opencli:// 来源"""
 
+from __future__ import annotations
+
 import hashlib
 import json
 import re
 import subprocess
+import tempfile
 from pathlib import Path
-from typing import Optional
+from typing import Optional, TYPE_CHECKING
 from urllib.parse import urlparse, parse_qs
 
 from src.models import Document, DocFormat, SourceType
+
+if TYPE_CHECKING:
+    from src.crawler import CrawlResult
 
 
 class OpenCLIError(Exception):
@@ -258,3 +264,84 @@ class OpenCLICrawler:
 
         # 通用错误
         return f'opencli 执行失败 (exit code {exit_code}): {stderr[:200]}'
+
+    def crawl(self, url: str) -> "CrawlResult":
+        """爬取 opencli:// 来源
+
+        Args:
+            url: opencli:// URL
+
+        Returns:
+            CrawlResult: 包含文档或错误信息
+        """
+        from src.crawler import CrawlResult
+
+        result = CrawlResult(
+            document=Document(
+                id='',
+                source_type=SourceType.OPENCLI,
+                source_path=url,
+            )
+        )
+
+        try:
+            # 1. 解析 URL
+            parsed = self._parse_url(url)
+            site = parsed['site']
+            command = parsed['command']
+            arg = parsed['arg']
+            params = parsed['params']
+
+            # 2. 白名单校验
+            if not self._check_whitelist(site, command, arg):
+                raise OpenCLIError(
+                    f'当前版本不支持 opencli://{site}/{command}。'
+                    f'仅支持: {", ".join(sorted(self.whitelist))}'
+                )
+
+            # 3. 构建命令
+            cmd = ['opencli', site, command]
+            if arg:
+                cmd.append(arg)
+
+            # 添加命名参数
+            for key, values in params.items():
+                for value in values:
+                    cmd.append(f'--{key}')
+                    cmd.append(value)
+
+            # 4. 判断输出类型并执行
+            key = f'{site}/{command}'
+
+            if key in ['xiaohongshu/note', 'bilibili/subtitle']:
+                # stdout 内容型
+                cmd.append('--format')
+                cmd.append('json')
+
+                stdout = self._execute_command(cmd)
+                data = json.loads(stdout)
+
+                doc = self._parse_stdout_content(site, command, data)
+                result.document = doc
+
+            elif key in ['zhihu/download', 'weixin/download']:
+                # 文件产出型
+                with tempfile.TemporaryDirectory() as tmpdir:
+                    cmd.append('--output')
+                    cmd.append(tmpdir)
+                    cmd.append('--format')
+                    cmd.append('json')
+
+                    self._execute_command(cmd)
+
+                    doc = self._parse_file_output(tmpdir, site, command, params)
+                    result.document = doc
+
+        except OpenCLIError as e:
+            result.errors.append(str(e))
+            result.document.id = self._generate_id(url + str(e))
+        except Exception as e:
+            result.errors.append(f'未知错误: {str(e)}')
+            result.document.id = self._generate_id(url + str(e))
+
+        return result

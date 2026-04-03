@@ -15,6 +15,7 @@ import fitz  # PyMuPDF
 from bs4 import BeautifulSoup
 
 from src.models import Document, SourceType, DocFormat, ImageInfo, Link, DocumentGraph
+from src.crawler.opencli import OpenCLICrawler, OpenCLIError
 
 WIKI_LINK_PATTERN = re.compile(r"\[\[([^\]|]+)(?:\|[^\]]*)?\]\]")
 MARKDOWN_LINK_PATTERN = re.compile(r"\[([^\]]*)\]\(([^)]+)\)")
@@ -736,6 +737,7 @@ class Crawler:
         self.url_crawler = URLCrawler()
         self.file_crawler = LocalFileCrawler()
         self.pdf_crawler = PDFCrawler()
+        self.opencli_crawler = OpenCLICrawler()
 
     def crawl_url(self, url: str, **kwargs) -> CrawlResult:
         """爬取URL"""
@@ -772,10 +774,17 @@ class Crawler:
         """爬取PDF"""
         return self.pdf_crawler.crawl(path, **kwargs)
 
+    def crawl_opencli(self, source: str) -> CrawlResult:
+        """爬取opencli://来源"""
+        return self.opencli_crawler.crawl(source)
+
     def crawl(self, source: str, **kwargs) -> CrawlResult | Iterator[CrawlResult]:
         """自动识别来源类型并爬取"""
         if source.startswith(("http://", "https://")):
             return self.crawl_url(source, **kwargs)
+
+        if source.startswith("opencli://"):
+            return self.crawl_opencli(source)
 
         path = Path(source)
         if path.suffix.lower() == ".pdf":

@@ -5,6 +5,7 @@ from unittest.mock import patch, MagicMock
 
 from src.models import SourceType, DocFormat
 from src.crawler.opencli import OpenCLICrawler, OpenCLIError
+from src.crawler import CrawlResult
 
 
 def test_source_type_opencli_exists():
@@ -226,3 +227,65 @@ def test_execute_opencli_auth_required():
         
         assert '登录态' in str(exc_info.value) or '认证' in str(exc_info.value)
         assert exc_info.value.exit_code == 77
+
+
+def test_crawl_xiaohongshu_note_success():
+    """测试成功爬取小红书笔记"""
+    crawler = OpenCLICrawler()
+
+    mock_output = '{"title": "笔记标题", "content": "笔记内容", "url": "https://xhs.com/123"}'
+
+    with patch.object(crawler, '_execute_command', return_value=mock_output):
+        result = crawler.crawl('opencli://xiaohongshu/note/abc123')
+
+        assert isinstance(result, CrawlResult)
+        assert result.document.title == '笔记标题'
+        assert result.document.content == '笔记内容'
+        assert result.document.source_type == SourceType.OPENCLI
+        assert not result.errors
+
+
+def test_crawl_not_in_whitelist():
+    """测试不在白名单中的命令被拒绝"""
+    crawler = OpenCLICrawler()
+
+    result = crawler.crawl('opencli://hackernews/top?limit=5')
+
+    assert len(result.errors) > 0
+    assert '不支持' in result.errors[0]
+
+
+def test_crawl_opencli_error():
+    """测试 opencli 执行失败的情况"""
+    crawler = OpenCLICrawler()
+
+    with patch.object(crawler, '_execute_command', side_effect=OpenCLIError('浏览器扩展未连接', 69)):
+        result = crawler.crawl('opencli://xiaohongshu/note/abc123')
+
+        assert len(result.errors) > 0
+        assert '浏览器扩展未连接' in result.errors[0]
+
+
+def test_crawler_aggregates_opencli():
+    """测试 Crawler 聚合器包含 OpenCLICrawler"""
+    from src.crawler import Crawler
+
+    crawler = Crawler()
+
+    assert hasattr(crawler, 'opencli_crawler')
+    assert hasattr(crawler, 'crawl_opencli')
+
+
+def test_crawler_auto_detect_opencli():
+    """测试 Crawler 自动识别 opencli:// URL"""
+    from src.crawler import Crawler
+
+    crawler = Crawler()
+
+    mock_output = '{"title": "Test", "content": "Content"}'
+
+    with patch.object(crawler.opencli_crawler, '_execute_command', return_value=mock_output):
+        result = crawler.crawl('opencli://xiaohongshu/note/abc123')
+
+        assert isinstance(result, CrawlResult)
+        assert result.document.source_type == SourceType.OPENCLI
