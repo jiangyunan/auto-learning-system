@@ -1,15 +1,13 @@
 """OpenCLI 爬虫测试"""
 
 from src.models import SourceType
+from src.crawler.opencli import OpenCLICrawler
 
 
 def test_source_type_opencli_exists():
     """测试 SourceType 包含 OPENCLI"""
     assert SourceType.OPENCLI.value == "opencli"
     assert hasattr(SourceType, "OPENCLI")
-
-
-from src.crawler.opencli import OpenCLICrawler
 
 
 def test_opencli_crawler_can_be_instantiated():
