@@ -126,12 +126,15 @@ class Cache:
         if not self.config.enabled:
             return 0
 
+        from datetime import datetime, timedelta
+
+        cutoff_date = datetime.now() - timedelta(days=max_age_days)
+        cutoff_iso = cutoff_date.isoformat()
+
         with self._get_connection() as conn:
             cursor = conn.execute(
-                """DELETE FROM cache_entries
-                   WHERE accessed_at < datetime('now', '-{} days')""".format(
-                    max_age_days
-                )
+                "DELETE FROM cache_entries WHERE accessed_at < ?",
+                (cutoff_iso,),
             )
             conn.commit()
             return cursor.rowcount

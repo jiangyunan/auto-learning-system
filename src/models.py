@@ -206,9 +206,17 @@ class DocumentGraph:
         return {
             "total_documents": len(self.documents),
             "total_links": len(self.links),
-            "wiki_links": len([l for l in self.links if l.link_type == "wiki"]),
-            "markdown_links": len([l for l in self.links if l.link_type == "markdown"]),
+            "wiki_links": len(
+                [link for link in self.links if link.link_type == "wiki"]
+            ),
+            "markdown_links": len(
+                [link for link in self.links if link.link_type == "markdown"]
+            ),
             "broken_links": len(
-                [l for l in self.links if not self._resolve_target(l.target_path)]
+                [
+                    link
+                    for link in self.links
+                    if not self._resolve_target(link.target_path)
+                ]
             ),
         }

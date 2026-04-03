@@ -1,5 +1,6 @@
 """Pipeline模块 - 文档处理流程编排"""
 
+import logging
 from pathlib import Path
 from dataclasses import dataclass
 
@@ -21,7 +22,7 @@ class PipelineProgress:
     current: int
     total: int
     message: str = ""
-    metadata: dict = None
+    metadata: dict | None = None
 
 
 @dataclass
@@ -302,7 +303,7 @@ class Pipeline:
         merged_l1 = await self.summarizer.merge_l1_summaries(l1_summaries)
         merged_l2 = await self.summarizer.merge_l2_summaries(l2_summaries)
 
-        total_steps = 4 + len(chunks)
+        # 使用之前计算的 total_steps (第269行已计算)
         result = ProcessResult(
             document_id=doc.id,
             document_title=doc.title,
@@ -345,7 +346,7 @@ class Pipeline:
                 result = await self.process_document(source, progress_callback)
                 results.append(result)
             except Exception as e:
-                print(f"Error processing {source}: {e}")
+                logging.warning(f"Error processing {source}: {e}")
         return results
 
     async def process_folder(
@@ -426,7 +427,7 @@ class Pipeline:
                 results.append(result)
 
             except Exception as e:
-                print(f"Error processing {doc.source_path}: {e}")
+                logging.warning(f"Error processing {doc.source_path}: {e}")
                 # 创建失败的占位结果
                 results.append(
                     ProcessResult(

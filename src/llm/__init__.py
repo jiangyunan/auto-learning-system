@@ -5,7 +5,6 @@ import re
 from typing import AsyncIterator, Optional
 from dataclasses import dataclass
 
-import openai
 from openai import AsyncOpenAI
 
 from src.config import LLMConfig

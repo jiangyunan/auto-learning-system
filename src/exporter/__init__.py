@@ -1,7 +1,6 @@
 """导出模块 - Markdown和Obsidian格式导出"""
 
 from pathlib import Path
-from datetime import datetime
 from dataclasses import dataclass
 import re
 

@@ -2,6 +2,7 @@
 
 import fnmatch
 import hashlib
+import logging
 import re
 import time
 from pathlib import Path
@@ -26,7 +27,7 @@ class CrawlResult:
 
     document: Document
     images_downloaded: int = 0
-    errors: list[str] = None
+    errors: list[str] | None = None
     links_found: int = 0  # 页面上发现的所有链接数量
     links_matched: int = 0  # 匹配pattern的链接数量
     pages_crawled: int = 1  # 实际爬取的页面数量（包含递归）
@@ -39,7 +40,7 @@ class CrawlResult:
 class BaseCrawler:
     """爬虫基类"""
 
-    def __init__(self, timeout: int = 30, headers: dict = None):
+    def __init__(self, timeout: int = 30, headers: dict | None = None):
         self.timeout = timeout
         self.headers = headers or {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.0"
@@ -66,7 +67,7 @@ class URLCrawler(BaseCrawler):
         )
 
     def crawl(
-        self, url: str, download_images: bool = False, image_dir: Path = None
+        self, url: str, download_images: bool = False, image_dir: Path | None = None
     ) -> CrawlResult:
         """爬取URL内容"""
         result = CrawlResult(
@@ -387,8 +388,8 @@ class URLCrawler(BaseCrawler):
                         all_links.extend(sub_all)
                         matched_links.extend(sub_matched)
 
-        except Exception:
-            pass  # 忽略错误，继续处理其他链接
+        except Exception as e:
+            logging.warning(f"Error discovering links from {url}: {e}")
 
         return list(set(all_links)), list(set(matched_links))
 

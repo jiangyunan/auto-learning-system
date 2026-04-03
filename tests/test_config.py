@@ -1,3 +1,5 @@
+"""配置模块测试"""
+
 import pytest
 import tempfile
 import os

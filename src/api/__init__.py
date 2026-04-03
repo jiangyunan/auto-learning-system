@@ -11,7 +11,7 @@ from src.config import Config
 from src.pipeline import Pipeline
 
 # 全局配置和pipeline实例
-_app_config: Config = None
+_app_config: Config | None = None
 
 
 class ProcessRequest(BaseModel):

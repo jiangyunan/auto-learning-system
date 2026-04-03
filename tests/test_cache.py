@@ -3,7 +3,6 @@
 import pytest
 import tempfile
 import os
-from pathlib import Path
 
 from src.cache import Cache, create_cache
 from src.config import CacheConfig
