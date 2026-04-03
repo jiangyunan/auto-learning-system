@@ -1,7 +1,11 @@
 """OpenCLI 爬虫模块 - 处理 opencli:// 来源"""
 
+import hashlib
+import json
 from typing import Optional
 from urllib.parse import urlparse, parse_qs
+
+from src.models import Document, DocFormat, SourceType
 
 
 class OpenCLIError(Exception):
@@ -74,3 +78,60 @@ class OpenCLICrawler:
         """
         key = f"{site}/{command}"
         return key in self.whitelist
+
+    def _parse_stdout_content(self, site: str, command: str, data: dict) -> Document:
+        """解析 stdout 输出的 JSON 数据为 Document
+
+        Args:
+            site: 站点名称
+            command: 命令名称
+            data: stdout 输出的 JSON 字典
+
+        Returns:
+            Document: 转换后的文档
+        """
+        doc_id = self._generate_id(f"{site}/{command}/{data.get('url', str(data))}")
+
+        # 根据站点和命令提取标题和内容
+        if site == "bilibili" and command == "subtitle":
+            title = data.get("title", "Bilibili Subtitle")
+            content = self._format_bilibili_subtitle(data)
+        elif site == "xiaohongshu" and command == "note":
+            title = data.get("title", "小红书笔记")
+            content = data.get("content", "")
+        else:
+            title = data.get("title", f"{site} {command}")
+            content = json.dumps(data, ensure_ascii=False, indent=2)
+
+        return Document(
+            id=doc_id,
+            source_type=SourceType.OPENCLI,
+            source_path=f"opencli://{site}/{command}",
+            title=title,
+            content=content,
+            format=DocFormat.TEXT,
+            metadata={
+                "opencli_site": site,
+                "opencli_command": command,
+                "opencli_raw_output_type": "stdout",
+                "opencli_data_keys": list(data.keys()),
+            },
+        )
+
+    def _format_bilibili_subtitle(self, data: dict) -> str:
+        """格式化 bilibili 字幕为可读文本"""
+        subtitles = data.get("subtitles", [])
+        if not subtitles:
+            return data.get("title", "")
+
+        lines = [data.get("title", ""), ""]
+        for sub in subtitles:
+            text = sub.get("text", "").strip()
+            if text:
+                lines.append(text)
+
+        return "\n".join(lines)
+
+    def _generate_id(self, source: str) -> str:
+        """生成文档 ID"""
+        return hashlib.sha256(source.encode()).hexdigest()[:16]

@@ -2,7 +2,7 @@
 
 import pytest
 
-from src.models import SourceType
+from src.models import SourceType, DocFormat
 from src.crawler.opencli import OpenCLICrawler
 
 
@@ -87,3 +87,44 @@ def test_parse_url_missing_command():
     crawler = OpenCLICrawler()
     with pytest.raises(ValueError, match="Missing command"):
         crawler._parse_url("opencli://xiaohongshu")
+
+
+def test_parse_bilibili_subtitle_output():
+    """测试解析 bilibili subtitle 输出"""
+    crawler = OpenCLICrawler()
+
+    mock_data = {
+        "bvid": "BV1xx411c7mD",
+        "title": "测试视频",
+        "subtitles": [
+            {"start": 0, "end": 5, "text": "你好"},
+            {"start": 5, "end": 10, "text": "世界"},
+        ],
+    }
+
+    doc = crawler._parse_stdout_content("bilibili", "subtitle", mock_data)
+
+    assert doc.title == "测试视频"
+    assert "你好" in doc.content
+    assert "世界" in doc.content
+    assert doc.format == DocFormat.TEXT
+    assert doc.source_type == SourceType.OPENCLI
+
+
+def test_parse_xiaohongshu_note_output():
+    """测试解析小红书笔记输出"""
+    crawler = OpenCLICrawler()
+
+    mock_data = {
+        "title": "笔记标题",
+        "content": "笔记正文内容...",
+        "author": "作者名",
+        "url": "https://www.xiaohongshu.com/...",
+    }
+
+    doc = crawler._parse_stdout_content("xiaohongshu", "note", mock_data)
+
+    assert doc.title == "笔记标题"
+    assert doc.content == "笔记正文内容..."
+    assert doc.format == DocFormat.TEXT
+    assert doc.source_type == SourceType.OPENCLI
