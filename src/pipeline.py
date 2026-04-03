@@ -56,6 +56,8 @@ class Pipeline:
 
         if source.startswith(("http://", "https://")):
             crawl_result = self.crawler.crawl_url(source)
+        elif source.startswith("opencli://"):
+            crawl_result = self.crawler.crawl_opencli(source)
         elif Path(source).suffix.lower() == ".pdf":
             crawl_result = self.crawler.crawl_pdf(source)
         else:
