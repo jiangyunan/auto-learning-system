@@ -4,7 +4,7 @@
 
 ## 功能特性
 
-- **多源输入**: 支持 URL 爬取、本地 Markdown/PDF 文件
+- **多源输入**: 支持 URL 爬取、本地 Markdown/PDF 文件、管道输入（stdin）
 - **智能分块**: 基于段落边界，目标 1500 tokens，保留 200 字符重叠
 - **两级摘要**:
   - L1: 内容压缩为 bullet points
@@ -151,6 +151,42 @@ uv run python -m src.cli process https://example.com --config ./myconfig.yaml
 
 # 查看配置示例
 uv run python -m src.cli config --example
+
+### 管道输入 (stdin)
+
+支持从 stdin 接收 Markdown 内容，自动检测语言并处理：
+
+```bash
+# 读取本地 Markdown 文件并导入
+cat document.md | uv run python -m src.cli stdin
+
+# 与其他工具配合使用（如 opencli）
+opencli bilibili hot -f md | uv run python -m src.cli stdin
+
+# 更多支持的工具示例
+# opencli (https://github.com/jackwener/opencli) - 输出 markdown
+opencli bilibili hot -f md | uv run python -m src.cli stdin
+
+# defuddle (https://github.com/kepano/defuddle) - 提取内容为 markdown
+defuddle https://example.com/article | uv run python -m src.cli stdin
+```
+
+**处理规则：**
+- **中文内容**：直接保存，不经过 LLM 处理
+- **非中文内容**：自动翻译为中文，并保留原文对照
+
+**输出格式（非中文翻译）：**
+```markdown
+# 文档标题
+
+中文翻译段落
+
+> 原文段落
+
+中文翻译段落
+
+> 原文段落
+```
 ```
 
 ### API 服务

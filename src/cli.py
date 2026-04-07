@@ -1,6 +1,8 @@
 """CLI主程序"""
 
 import asyncio
+import re
+import sys
 from pathlib import Path
 from typing import Optional
 
@@ -13,7 +15,7 @@ from src.config import load_config
 from src.pipeline import Pipeline, PipelineProgress
 
 app = typer.Typer(help="Auto Learning System - 自动学习文档生成Obsidian笔记")
-console = Console()
+console = Console(force_terminal=sys.stdout.isatty())
 
 
 @app.command()
@@ -108,7 +110,6 @@ def process(
     # 递归采集模式：在 Progress 之前完成链接发现和用户确认
     confirmed_recursive = False
     if source.startswith(("http://", "https://")) and pattern:
-
         console.print("\n[bold blue]正在发现链接...[/bold blue]")
         console.print(f"起始URL: {source}")
         console.print(f"匹配模式: {pattern}")
@@ -227,6 +228,91 @@ def process(
             "Output", str(result.output_path) if result.output_path else "N/A"
         )
         console.print(table)
+
+
+@app.command(name="stdin")
+def import_cmd(
+    config_path: Optional[str] = typer.Option(None, "--config", "-c"),
+    verbose: bool = typer.Option(False, "--verbose", "-v"),
+):
+    """从 stdin 导入 Markdown 文档（支持管道输入）"""
+    if sys.stdin.isatty():
+        console.print("[red]此命令需要通过管道接收 Markdown 内容[/red]")
+        console.print(
+            "[dim]用法: cat document.md | uv run python -m src.cli stdin[/dim]"
+        )
+        raise typer.Exit(1)
+
+    config = load_config(config_path) if config_path else load_config()
+    pipeline = Pipeline(config)
+
+    content = sys.stdin.read()
+    if not content.strip():
+        console.print("[red]stdin 为空[/red]")
+        raise typer.Exit(1)
+
+    from src.utils.translate import (
+        detect_language,
+        is_chinese,
+        translate_to_chinese,
+        format_bilingual,
+    )
+
+    title_match = re.search(r"^#\s+(.+)$", content, re.MULTILINE)
+    title = title_match.group(1).strip() if title_match else "Untitled"
+
+    lang = detect_language(content)
+    console.print(f"[cyan]检测语言: {lang}[/cyan]")
+
+    final_content = content
+
+    if not is_chinese(content):
+        console.print("[yellow]正在翻译为中文...[/yellow]")
+
+        async def translate():
+            translated = await translate_to_chinese(pipeline.llm, content)
+            return format_bilingual(content, translated)
+
+        try:
+            loop = asyncio.get_running_loop()
+            final_content = loop.run_until_complete(translate())
+        except RuntimeError:
+            final_content = asyncio.run(translate())
+        console.print("[green]翻译完成[/green]")
+
+    console.print(f"[green]导入文档: {title}[/green]")
+
+    async def run():
+        from src.models import Document, DocFormat, SourceType, ProcessResult
+
+        doc = Document(
+            id="stdin-import",
+            source_type=SourceType.LOCAL_FILE,
+            source_path="stdin://import",
+            title=title,
+            content=final_content,
+            format=DocFormat.MARKDOWN,
+        )
+
+        result = ProcessResult(
+            document_id=doc.id,
+            document_title=doc.title,
+            chunks_count=0,
+            original_content=final_content,
+        )
+
+        export_result = pipeline.exporter.export(result)
+        if export_result.success:
+            result.output_path = export_result.file_path
+
+        return result
+
+    result = asyncio.run(run())
+
+    if result.output_path:
+        console.print(f"[green]已导出至: {result.output_path}[/green]")
+    else:
+        console.print("[red]导出失败[/red]")
 
 
 @app.command()

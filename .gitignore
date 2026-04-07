@@ -45,3 +45,6 @@ Thumbs.db
 config.yaml
 docs/
 .claude/
+
+# Data and cache
+data/

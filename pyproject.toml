@@ -16,6 +16,7 @@ dependencies = [
     "fastapi",
     "uvicorn",
     "crawl4ai>=0.8",
+    "langdetect>=1.0",
 ]
 
 [project.optional-dependencies]
