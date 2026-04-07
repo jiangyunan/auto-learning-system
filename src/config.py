@@ -43,12 +43,18 @@ class CacheConfig:
 
 
 @dataclass
+class CrawlerConfig:
+    use_crawl4ai: bool = False
+
+
+@dataclass
 class Config:
     llm: LLMConfig = field(default_factory=LLMConfig)
     output: OutputConfig = field(default_factory=OutputConfig)
     features: FeaturesConfig = field(default_factory=FeaturesConfig)
     chunker: ChunkerConfig = field(default_factory=ChunkerConfig)
     cache: CacheConfig = field(default_factory=CacheConfig)
+    crawler: CrawlerConfig = field(default_factory=CrawlerConfig)
 
 
 def _expand_env_vars(value: str) -> str:
@@ -99,6 +105,7 @@ def load_config(config_path: str = "config.yaml") -> Config:
     features_data = data.get("features", {})
     chunker_data = data.get("chunker", {})
     cache_data = data.get("cache", {})
+    crawler_data = data.get("crawler", {})
 
     return Config(
         llm=LLMConfig(**llm_data),
@@ -106,4 +113,5 @@ def load_config(config_path: str = "config.yaml") -> Config:
         features=FeaturesConfig(**features_data),
         chunker=ChunkerConfig(**chunker_data),
         cache=CacheConfig(**cache_data),
+        crawler=CrawlerConfig(**crawler_data),
     )

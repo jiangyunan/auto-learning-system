@@ -9,6 +9,7 @@ typer
 rich
 fastapi
 uvicorn
+crawl4ai>=0.8
 
 [dev]
 pytest

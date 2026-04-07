@@ -3,9 +3,10 @@
 import pytest
 import tempfile
 from pathlib import Path
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import Mock, patch, MagicMock, AsyncMock
 
 from src.crawler import URLCrawler, LocalFileCrawler, PDFCrawler, Crawler, CrawlResult
+from src.crawler.crawl4ai import Crawl4AICrawler
 from src.models import SourceType, DocFormat
 
 
@@ -257,6 +258,100 @@ class TestPDFCrawler:
 
         assert len(result.errors) > 0
         assert "PDF read error" in result.errors[0]
+
+
+class TestCrawl4AICrawler:
+    """Crawl4AI 爬虫测试"""
+
+    @pytest.fixture
+    def crawl4ai_crawler(self):
+        return Crawl4AICrawler()
+
+    @pytest.mark.asyncio
+    @patch("src.crawler.crawl4ai.AsyncWebCrawler")
+    async def test_acrawl_basic(self, mock_crawler_class, crawl4ai_crawler):
+        """测试基本 Crawl4AI 爬取"""
+        mock_result = Mock()
+        mock_result.success = True
+        mock_result.markdown = "# Article Title\n\nThis is the content."
+        mock_result.metadata = {"title": "Article Title"}
+        mock_result.links = {"internal": []}
+
+        mock_crawler = Mock()
+        mock_crawler.arun = AsyncMock(return_value=mock_result)
+        mock_crawler_class.return_value.__aenter__ = AsyncMock(return_value=mock_crawler)
+        mock_crawler_class.return_value.__aexit__ = AsyncMock(return_value=False)
+
+        result = await crawl4ai_crawler.acrawl("https://example.com/article")
+
+        assert result.document.source_type == SourceType.URL
+        assert result.document.source_path == "https://example.com/article"
+        assert result.document.title == "Article Title"
+        assert "This is the content" in result.document.content
+        assert result.document.format == DocFormat.MARKDOWN
+        assert result.document.metadata.get("crawler") == "crawl4ai"
+
+    @pytest.mark.asyncio
+    @patch("src.crawler.crawl4ai.AsyncWebCrawler")
+    async def test_acrawl_error(self, mock_crawler_class, crawl4ai_crawler):
+        """测试 Crawl4AI 请求错误处理"""
+        mock_crawler_class.side_effect = Exception("Browser launch failed")
+
+        result = await crawl4ai_crawler.acrawl("https://example.com/error")
+
+        assert len(result.errors) > 0
+        assert "Browser launch failed" in result.errors[0]
+
+    @pytest.mark.asyncio
+    @patch("src.crawler.crawl4ai.AsyncWebCrawler")
+    async def test_acrawl_recursive(self, mock_crawler_class, crawl4ai_crawler):
+        """测试 Crawl4AI 递归爬取"""
+        # 模拟两个页面
+        root_result = Mock()
+        root_result.success = True
+        root_result.markdown = "# Root\n\nRoot content."
+        root_result.metadata = {"title": "Root"}
+        root_result.links = {
+            "internal": [Mock(href="/page1"), Mock(href="https://example.com/page2/")]
+        }
+
+        page1_result = Mock()
+        page1_result.success = True
+        page1_result.markdown = "# Page 1\n\nPage 1 content."
+        page1_result.metadata = {"title": "Page 1"}
+        page1_result.links = {"internal": []}
+
+        page2_result = Mock()
+        page2_result.success = True
+        page2_result.markdown = "# Page 2\n\nPage 2 content."
+        page2_result.metadata = {"title": "Page 2"}
+        page2_result.links = {"internal": []}
+
+        # arun 按 URL 返回不同结果
+        async def _arun_side_effect(*, url, config=None):
+            if url == "https://example.com/" or url == "https://example.com":
+                return root_result
+            if "page1" in url:
+                return page1_result
+            if "page2" in url:
+                return page2_result
+            return root_result
+
+        mock_crawler = Mock()
+        mock_crawler.arun = AsyncMock(side_effect=_arun_side_effect)
+        mock_crawler_class.return_value.__aenter__ = AsyncMock(return_value=mock_crawler)
+        mock_crawler_class.return_value.__aexit__ = AsyncMock(return_value=False)
+
+        result = await crawl4ai_crawler.acrawl_recursive(
+            "https://example.com", patterns=["*/page*"], max_depth=2
+        )
+
+        assert result.document.title == "Root (3 页)"
+        assert "Root content" in result.document.content
+        assert "Page 1 content" in result.document.content
+        assert "Page 2 content" in result.document.content
+        assert result.pages_crawled == 3
+        assert result.links_matched == 2
 
 
 class TestCrawler:

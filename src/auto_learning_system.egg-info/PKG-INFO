@@ -14,6 +14,7 @@ Requires-Dist: typer
 Requires-Dist: rich
 Requires-Dist: fastapi
 Requires-Dist: uvicorn
+Requires-Dist: crawl4ai>=0.8
 Provides-Extra: dev
 Requires-Dist: pytest; extra == "dev"
 Requires-Dist: pytest-asyncio; extra == "dev"

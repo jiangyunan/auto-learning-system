@@ -16,6 +16,7 @@ from bs4 import BeautifulSoup
 
 from src.models import Document, SourceType, DocFormat, ImageInfo, Link, DocumentGraph
 from src.crawler.opencli import OpenCLICrawler, OpenCLIError
+from src.crawler.crawl4ai import Crawl4AICrawler
 
 WIKI_LINK_PATTERN = re.compile(r"\[\[([^\]|]+)(?:\|[^\]]*)?\]\]")
 MARKDOWN_LINK_PATTERN = re.compile(r"\[([^\]]*)\]\(([^)]+)\)")
@@ -738,6 +739,7 @@ class Crawler:
         self.file_crawler = LocalFileCrawler()
         self.pdf_crawler = PDFCrawler()
         self.opencli_crawler = OpenCLICrawler()
+        self.crawl4ai_crawler = Crawl4AICrawler()
 
     def crawl_url(self, url: str, **kwargs) -> CrawlResult:
         """爬取URL"""

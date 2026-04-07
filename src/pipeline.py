@@ -55,7 +55,10 @@ class Pipeline:
             progress_callback(PipelineProgress("crawl", 0, 4, f"Fetching {source}..."))
 
         if source.startswith(("http://", "https://")):
-            crawl_result = self.crawler.crawl_url(source)
+            if self.config.crawler.use_crawl4ai:
+                crawl_result = await self.crawler.crawl4ai_crawler.acrawl(source)
+            else:
+                crawl_result = self.crawler.crawl_url(source)
         elif source.startswith("opencli://"):
             crawl_result = self.crawler.crawl_opencli(source)
         elif Path(source).suffix.lower() == ".pdf":
@@ -209,9 +212,14 @@ class Pipeline:
         if progress_callback:
             progress_callback(PipelineProgress("crawl", 0, 4, f"Fetching {url}..."))
 
-        crawl_result = self.crawler.crawl_url_recursive(
-            url, patterns=patterns, max_depth=max_depth
-        )
+        if self.config.crawler.use_crawl4ai:
+            crawl_result = await self.crawler.crawl4ai_crawler.acrawl_recursive(
+                url, patterns=patterns, max_depth=max_depth
+            )
+        else:
+            crawl_result = self.crawler.crawl_url_recursive(
+                url, patterns=patterns, max_depth=max_depth
+            )
 
         if not crawl_result or not crawl_result.document.content:
             raise ValueError(f"Failed to crawl: {url}")
