@@ -168,7 +168,7 @@ opencli bilibili hot -f md | uv run python -m src.cli stdin
 opencli bilibili hot -f md | uv run python -m src.cli stdin
 
 # defuddle (https://github.com/kepano/defuddle) - 提取内容为 markdown
-defuddle https://example.com/article | uv run python -m src.cli stdin
+npx defuddle parse https://example.com/article | uv run python -m src.cli stdin
 ```
 
 **处理规则：**

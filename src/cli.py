@@ -234,12 +234,13 @@ def process(
 def import_cmd(
     config_path: Optional[str] = typer.Option(None, "--config", "-c"),
     verbose: bool = typer.Option(False, "--verbose", "-v"),
+    title: Optional[str] = typer.Option(None, "--title", "-t", help="自定义文档标题"),
 ):
     """从 stdin 导入 Markdown 文档（支持管道输入）"""
     if sys.stdin.isatty():
         console.print("[red]此命令需要通过管道接收 Markdown 内容[/red]")
         console.print(
-            "[dim]用法: cat document.md | uv run python -m src.cli stdin[/dim]"
+            "[dim]用法: cat document.md | uv run python -m src.cli stdin [-t TITLE][/dim]"
         )
         raise typer.Exit(1)
 
@@ -258,8 +259,11 @@ def import_cmd(
         format_bilingual,
     )
 
-    title_match = re.search(r"^#\s+(.+)$", content, re.MULTILINE)
-    title = title_match.group(1).strip() if title_match else "Untitled"
+    if title:
+        doc_title = title
+    else:
+        title_match = re.search(r"^#\s+(.+)$", content, re.MULTILINE)
+        doc_title = title_match.group(1).strip() if title_match else "Untitled"
 
     lang = detect_language(content)
     console.print(f"[cyan]检测语言: {lang}[/cyan]")
@@ -280,7 +284,7 @@ def import_cmd(
             final_content = asyncio.run(translate())
         console.print("[green]翻译完成[/green]")
 
-    console.print(f"[green]导入文档: {title}[/green]")
+    console.print(f"[green]导入文档: {doc_title}[/green]")
 
     async def run():
         from src.models import Document, DocFormat, SourceType, ProcessResult
@@ -289,7 +293,7 @@ def import_cmd(
             id="stdin-import",
             source_type=SourceType.LOCAL_FILE,
             source_path="stdin://import",
-            title=title,
+            title=doc_title,
             content=final_content,
             format=DocFormat.MARKDOWN,
         )
